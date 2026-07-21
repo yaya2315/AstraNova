@@ -22,7 +22,6 @@ export interface PlanetData {
   rings?: boolean
   moon?: MoonData
   color: string
-  textureUrl: string
 }
 
 export const planets: PlanetData[] = [
@@ -45,7 +44,6 @@ export const planets: PlanetData[] = [
       { value: '0.38g', label: 'Gravedad' },
       { value: '0', label: 'Lunas' },
     ],
-    textureUrl: '/textures/2k_mercury.jpg',
   },
   {
     name: 'Venus',
@@ -66,7 +64,6 @@ export const planets: PlanetData[] = [
       { value: '0.91g', label: 'Gravedad' },
       { value: '0', label: 'Lunas' },
     ],
-    textureUrl: '/textures/4k_venus_atmosphere.jpg',
   },
   {
     name: 'Tierra',
@@ -88,7 +85,6 @@ export const planets: PlanetData[] = [
       { value: '1', label: 'Lunas' },
     ],
     moon: { size: 0.15, orbit: 1.5, speed: 0.8 },
-    textureUrl: '/textures/8k_earth_daymap.jpg',
   },
   {
     name: 'Marte',
@@ -109,7 +105,6 @@ export const planets: PlanetData[] = [
       { value: '0.38g', label: 'Gravedad' },
       { value: '2', label: 'Lunas' },
     ],
-    textureUrl: '/textures/8k_mars.jpg',
   },
   {
     name: 'Júpiter',
@@ -131,7 +126,6 @@ export const planets: PlanetData[] = [
       { value: '95', label: 'Lunas' },
     ],
     moon: { size: 0.1, orbit: 2.2, speed: 0.55 },
-    textureUrl: '/textures/8k_jupiter.jpg',
   },
   {
     name: 'Saturno',
@@ -153,7 +147,6 @@ export const planets: PlanetData[] = [
       { value: '1.07g', label: 'Gravedad' },
       { value: '146', label: 'Lunas' },
     ],
-    textureUrl: '/textures/8k_saturn.jpg',
   },
   {
     name: 'Urano',
@@ -174,7 +167,6 @@ export const planets: PlanetData[] = [
       { value: '0.89g', label: 'Gravedad' },
       { value: '27', label: 'Lunas' },
     ],
-    textureUrl: '/textures/2k_uranus.jpg',
   },
   {
     name: 'Neptuno',
@@ -195,7 +187,6 @@ export const planets: PlanetData[] = [
       { value: '1.14g', label: 'Gravedad' },
       { value: '16', label: 'Lunas' },
     ],
-    textureUrl: '/textures/2k_neptune.jpg',
   },
 ]
 
