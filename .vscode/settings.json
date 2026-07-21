@@ -1,0 +1,20 @@
+{
+  "css.lint.unknownAtRules": "ignore",
+  "material-icon-theme.folders.associations": {
+    "components": "components",
+    "hooks": "hook",
+    "lib": "lib",
+    "styles": "style",
+    "textures": "resource",
+    "public": "public",
+    "app": "app",
+    "src": "src"
+  },
+  "material-icon-theme.folders.color": "#7c3aed",
+  "workbench.colorCustomizations": {
+    "gitDecoration.ignoredResourceForeground": "#555",
+    "explorer.inactiveSelectionBackground": "#7c3aed33"
+  },
+  "explorer.decorations.colors": true,
+  "explorer.decorations.badges": true
+}
