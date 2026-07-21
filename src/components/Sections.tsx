@@ -1332,7 +1332,7 @@ function OrderGame({ color, onComplete }: { color: MissionColorScheme; onComplet
   const [timeLeft, setTimeLeft] = useState(7)
   const [started, setStarted]  = useState(false)
   const [failed, setFailed]    = useState(false)
-  const timerRef = useRef<ReturnType<typeof setInterval>>()
+  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined)
 
   const start = () => {
     const pos: [number,number][] = [[10,15],[58,15],[10,57],[58,57]]
@@ -1522,7 +1522,7 @@ function CodeGame({ color, onComplete }: { color: MissionColorScheme; onComplete
   const [input, setInput]   = useState('')
   const [failed, setFailed] = useState(false)
   const [timeLeft, setTimeLeft] = useState(3)
-  const timerRef = useRef<ReturnType<typeof setInterval>>()
+  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined)
 
   const startGame = () => {
     const c = String(Math.floor(1000 + Math.random() * 9000))
