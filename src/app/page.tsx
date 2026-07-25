@@ -6,6 +6,7 @@ import LoadingScreen from '@/components/LoadingScreen'
 import { DeepNavProvider, useDeepNav, LAYERS } from '@/components/DeepNavEngine'
 import PremiumSpaceExperience from '@/components/PremiumSpaceExperience'
 import SideNav from '@/components/SideNav'
+import { NAV_ITEMS } from '@/lib/navItems'
 import {
   HeroSection,
   HistorySection,
@@ -32,15 +33,6 @@ const SolarSystem = dynamic(() => import('@/components/SolarSystem'), {
 function TopNav() {
   const { depth, jumpTo } = useDeepNav()
 
-  const navItems = [
-    { layerIndex: 0, label: 'INICIO' },
-    { layerIndex: 1, label: 'SISTEMA' },
-    { layerIndex: 2, label: 'HISTORIA' },
-    { layerIndex: 3, label: 'CONSTELAC.' },
-    { layerIndex: 4, label: 'GALERÍA' },
-    { layerIndex: 5, label: 'MISIONES' },
-  ]
-
   return (
     <motion.nav
       initial={{ opacity: 0, y: -20 }}
@@ -56,16 +48,22 @@ function TopNav() {
         boxShadow: '0 4px 32px rgba(0,0,0,0.5)',
       }}
     >
-      {/* Logo */}
-      <div className="font-display flex flex-col leading-none select-none flex-shrink-0" style={{ letterSpacing: '2.2px' }}>
-        <span style={{ fontSize: '0.62rem', color: '#00F0FF', fontWeight: 700 }}>ASTRA</span>
-        <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.30)', marginTop: '2px' }}>NOVA</span>
+      {/* Logo — punto pulsante como el SideNav, para que no se sienta tan desnudo */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <span className="relative flex-shrink-0" style={{ width: 6, height: 6 }}>
+          <span className="absolute inset-0 rounded-full animate-pulse-glow" style={{ background: '#00F0FF' }} />
+        </span>
+        <div className="font-display flex flex-col leading-none select-none" style={{ letterSpacing: '2.2px' }}>
+          <span style={{ fontSize: '0.62rem', color: '#00F0FF', fontWeight: 700 }}>ASTRA</span>
+          <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.30)', marginTop: '2px' }}>NOVA</span>
+        </div>
       </div>
 
-      {/* Botones de sección — se encogen y, si no entran, se deslizan horizontalmente
-          en vez de salirse de pantalla (fix: quedaban botones inalcanzables en <360px) */}
+      {/* Botones de sección — ícono + etiqueta, con un halo activo que se desliza
+          entre botones (layoutId compartido). Se encogen y, si no entran, la fila
+          se desliza horizontalmente en vez de salirse de pantalla. */}
       <div className="flex items-center gap-0.5 min-w-0 overflow-x-auto no-scrollbar">
-        {navItems.map(item => {
+        {NAV_ITEMS.map(item => {
           const isActive = depth === item.layerIndex
           return (
             <button
@@ -73,22 +71,28 @@ function TopNav() {
               onClick={() => jumpTo(item.layerIndex)}
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}
-              className="relative px-1.5 sm:px-2 py-1.5 rounded-lg transition-all duration-200 border-0 cursor-pointer font-display flex-shrink-0"
-              style={{
-                fontSize: '8.5px',
-                letterSpacing: '1px',
-                color:      isActive ? '#00F0FF' : 'rgba(255,255,255,0.38)',
-                background: isActive ? 'rgba(0,240,255,0.08)' : 'transparent',
-                border:     `1px solid ${isActive ? 'rgba(0,240,255,0.20)' : 'transparent'}`,
-              }}
-              onMouseEnter={e => {
-                if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.75)'
-              }}
-              onMouseLeave={e => {
-                if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.38)'
-              }}
+              className={`relative flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-full transition-colors duration-200 border-0 cursor-pointer font-display flex-shrink-0 ${
+                isActive ? 'text-accent-cyan' : 'text-white/40 hover:text-white/75'
+              }`}
             >
-              {item.label}
+              {isActive && (
+                <motion.span
+                  layoutId="topNavActivePill"
+                  className="absolute inset-0 rounded-full pointer-events-none"
+                  style={{
+                    background: 'rgba(0,240,255,0.09)',
+                    border: '1px solid rgba(0,240,255,0.26)',
+                    boxShadow: '0 0 14px rgba(0,240,255,0.16), inset 0 1px 0 rgba(255,255,255,0.06)',
+                  }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                />
+              )}
+              <span className="relative z-[1] flex-shrink-0 [&>svg]:w-[13px] [&>svg]:h-[13px]">
+                {item.icon}
+              </span>
+              <span className="relative z-[1] whitespace-nowrap" style={{ fontSize: '8.5px', letterSpacing: '1px' }}>
+                {item.label}
+              </span>
             </button>
           )
         })}
