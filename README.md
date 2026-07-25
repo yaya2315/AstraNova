@@ -9,8 +9,7 @@ Plataforma web inmersiva de exploración espacial construida con **Next.js + Rea
 | `src/app/layout.tsx` | Plantilla base (`<html>`, fuentes, metadata SEO) |
 | `src/app/page.tsx` | Página principal — ordena todas las secciones |
 | `src/components/` | Componentes React (secciones, sistema solar 3D, fondo animado, navegación) |
-| `src/hooks/` | Hooks reutilizables |
-| `src/lib/data.ts` | Datos de los planetas del sistema solar |
+| `src/lib/` | Datos (planetas, misiones, constelaciones) e ítems del menú |
 | `style-general.css` | Estilos globales (importado desde `layout.tsx`) |
 
 Ver [documentacion/ESTRUCTURA.md](documentacion/ESTRUCTURA.md) para el detalle completo de componentes.
@@ -33,3 +32,12 @@ Formas de abrirlo fácil en VS Code:
 2. **Terminal integrada de VS Code**: `npm run start` y abrir `http://localhost:3000`.
 
 Cada vez que cambies algo en `src/`, corré `npm run build` de nuevo para regenerar `out/` con los cambios.
+
+### Archivos a mano: `out/style.css` y `out/js/`
+
+Next.js necesita que el CSS y el JS reales vivan en `out/_next/static/...` con nombres hasheados — su propio motor de carga de módulos depende de esas rutas exactas, así que esos son los que de verdad usa el sitio. Para no tener que andar buscando entre carpetas anidadas, cada `npm run build` genera además copias con nombres simples en la raíz de `out/`:
+
+- `out/style.css` — todo el CSS ya compilado, en un solo archivo.
+- `out/js/` — cada archivo JS (Next separa el código en varios para cargar más rápido), con nombres planos, sin subcarpetas.
+
+Son copias de solo lectura para inspeccionar o abrir rápido — el sitio sigue funcionando desde `out/_next/`, así que editar los archivos de `out/js/`/`out/style.css` no cambia nada; hay que editar `src/` y volver a correr `npm run build`.

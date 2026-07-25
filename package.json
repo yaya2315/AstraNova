@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
+    "postbuild": "node scripts/flatten-out.mjs",
     "start": "npx serve out"
   },
   "dependencies": {
