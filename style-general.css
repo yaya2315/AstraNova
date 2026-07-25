@@ -545,6 +545,16 @@ body.ls-pre #premium-bg {
     radial-gradient(ellipse 45% 30% at 54% 68%, rgba(var(--aurora-3), 0.10) 0%, transparent 55%);
 }
 
+/* Oculta la scrollbar en tiras horizontales deslizables (nav móvil, etc.)
+   sin quitar la posibilidad de scroll — el contenido sigue siendo alcanzable. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Reduced-motion: hide the animated canvas, show a static gradient instead */
 @media (prefers-reduced-motion: reduce) {
   .aurora-canvas { display: none !important; }

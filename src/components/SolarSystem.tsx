@@ -534,18 +534,21 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
 }) {
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="glass-strong rounded-3xl max-w-[900px] w-full max-h-[85vh] overflow-y-auto p-8 relative"
+      <div className="glass-strong rounded-3xl max-w-[900px] w-full max-h-[85vh] overflow-y-auto p-5 sm:p-8 relative"
         onClick={(e) => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all">
+        <button onClick={onClose} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all z-10">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
 
-        <button onClick={onPrev} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all">
+        {/* Prev/Next: en móvil van arriba junto al botón de cerrar (no centrados en
+            todo el alto scrolleable, donde terminarían tapando la descripción larga
+            al hacer scroll); en desktop mantienen la posición centrada original. */}
+        <button onClick={onPrev} className="absolute left-4 top-4 lg:top-1/2 lg:-translate-y-1/2 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
         </button>
-        <button onClick={onNext} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all">
+        <button onClick={onNext} className="absolute right-16 lg:right-4 top-4 lg:top-1/2 lg:-translate-y-1/2 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
         </button>
 
@@ -653,28 +656,30 @@ export default function SolarSystem() {
   }, [])
 
   return (
-    <div ref={containerRef} className={`relative w-full rounded-2xl overflow-hidden border border-white/[0.04] bg-space-950 ${immersive ? 'h-screen' : 'h-[750px] lg:h-[800px]'}`}>
+    <div ref={containerRef} className={`relative w-full rounded-2xl overflow-hidden border border-white/[0.04] bg-space-950 ${immersive ? 'h-screen' : 'h-[440px] sm:h-[560px] md:h-[680px] lg:h-[800px]'}`}>
 
-      {/* Immersive button — top left */}
+      {/* Immersive button — top left. Sin etiqueta de texto en pantallas angostas
+          (icono solo) para no chocar con el control de velocidad de la derecha. */}
       <button onClick={toggleImmersive}
-        className="absolute top-4 left-4 z-20 flex items-center gap-2 glass rounded-full px-3.5 py-1.5 text-slate-400 hover:text-white transition-colors">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        className="absolute top-4 left-4 z-20 flex items-center gap-2 glass rounded-full px-2.5 sm:px-3.5 py-1.5 text-slate-400 hover:text-white transition-colors">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
           {immersive
             ? <><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></>
             : <><path d="M3 8V5a2 2 0 0 1 2-2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/></>
           }
         </svg>
-        <span className="font-display text-[0.55rem] tracking-[2px]">{immersive ? 'SALIR' : 'INMERSIVO'}</span>
+        <span className="hidden sm:inline font-display text-[0.55rem] tracking-[2px] whitespace-nowrap">{immersive ? 'SALIR' : 'INMERSIVO'}</span>
       </button>
 
-      {/* Speed control — top right */}
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-1 glass rounded-full px-3 py-1.5">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-accent-purple mr-1">
+      {/* Speed control — top right. Más compacto en móvil: sin ícono de reloj
+          y botones más angostos para no superponerse con el botón inmersivo. */}
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-0.5 sm:gap-1 glass rounded-full px-1.5 sm:px-3 py-1.5">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="hidden sm:block text-accent-purple mr-1 flex-shrink-0">
           <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
         </svg>
         {([0.5, 1, 2, 5] as const).map((v, i) => (
           <button key={v} onClick={() => setSpeed(v)}
-            className={`font-display text-[0.55rem] tracking-wider px-2.5 py-1 rounded-full transition-all ${
+            className={`font-display text-[0.55rem] tracking-wider px-1.5 sm:px-2.5 py-1 rounded-full transition-all whitespace-nowrap ${
               speed === v ? 'bg-accent-purple/20 text-accent-purple' : 'text-slate-500 hover:text-slate-300'
             }`}>
             {['0.5x','1x','2x','5x'][i]}

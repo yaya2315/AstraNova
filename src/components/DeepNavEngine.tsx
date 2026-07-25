@@ -74,6 +74,12 @@ export function DeepNavProvider({ children }: { children: React.ReactNode }) {
       if (state === 'active') {
         el.removeAttribute('aria-hidden')
         requestAnimationFrame(() => { el.scrollTop = 0 })
+        // El motor solo anima `transform` (scale), que no dispara ResizeObserver.
+        // Un <canvas> (Three.js, mapas, etc.) montado mientras la capa estaba en
+        // scale(0.4) queda con el tamaño equivocado para siempre si no se le avisa.
+        // Se dispara al activar y de nuevo cuando termina la transición.
+        window.dispatchEvent(new Event('resize'))
+        setTimeout(() => window.dispatchEvent(new Event('resize')), lockMs())
       } else {
         el.setAttribute('aria-hidden', 'true')
       }

@@ -655,6 +655,66 @@ export function ConstellationsSection() {
   const onLeave = () => { setDragging(false); setHovered(null) }
   const onClick = () => { if (!didDrag.current && hovered) { panTo(hovered); setSelected(hovered) } }
 
+  // ── Soporte táctil ────────────────────────────────────────────────────────
+  // Los handlers de arriba solo escuchan mouse. En touch no hay "hover" antes
+  // de tocar, así que el arrastre y la selección por tap se resuelven aparte
+  // con listeners nativos {passive:false} (para poder frenar el scroll de la
+  // página mientras se arrastra el mapa — React adjunta touchmove como pasivo).
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    let active = false
+
+    const findAt = (mx: number, my: number): ConstellationData | null => {
+      for (const c of [...constellations, ...customRef.current]) {
+        if (filter !== 'all' && c.type !== filter) continue
+        for (const s of c.stars) {
+          if (Math.sqrt((mx - s[0]*VIRT_W)**2 + (my - s[1]*VIRT_H)**2) < 28) return c
+        }
+      }
+      return null
+    }
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      active = true; didDrag.current = false
+      const t = e.touches[0]
+      dragRef.current = { mx: t.clientX, my: t.clientY, ox: offsetRef.current.x, oy: offsetRef.current.y }
+      setDragging(true)
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!active) return
+      e.preventDefault()
+      const t = e.touches[0]
+      const dx = t.clientX - dragRef.current.mx, dy = t.clientY - dragRef.current.my
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) didDrag.current = true
+      const next = clamp(dragRef.current.ox - dx, dragRef.current.oy - dy)
+      setOffset(next); offsetRef.current = next
+    }
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!active) return
+      active = false
+      setDragging(false)
+      if (!didDrag.current && e.changedTouches.length) {
+        const t = e.changedTouches[0]
+        const rect = el.getBoundingClientRect()
+        const found = findAt(t.clientX - rect.left + offsetRef.current.x, t.clientY - rect.top + offsetRef.current.y)
+        if (found) { panTo(found); setSelected(found) }
+      }
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [filter]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const navigate = (dir: number) => {
     if (!selected) return
     const idx=filteredConstellations.indexOf(selected); setNavDir(dir)

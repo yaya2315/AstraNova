@@ -18,7 +18,7 @@ import {
 const SolarSystem = dynamic(() => import('@/components/SolarSystem'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[750px] rounded-2xl overflow-hidden flex items-center justify-center bg-space-800/30">
+    <div className="w-full h-[440px] sm:h-[560px] md:h-[680px] lg:h-[800px] rounded-2xl overflow-hidden flex items-center justify-center bg-space-800/30">
       <div className="font-display text-sm tracking-[4px] text-slate-500 animate-pulse">
         CARGANDO SISTEMA SOLAR...
       </div>
@@ -46,7 +46,7 @@ function TopNav() {
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.8, delay: 1.0, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed top-0 left-0 right-0 z-[998] lg:hidden flex items-center justify-between px-4"
+      className="fixed top-0 left-0 right-0 z-[998] lg:hidden flex items-center justify-between gap-2 px-2 sm:px-4"
       style={{
         height: '54px',
         background: 'rgba(4, 6, 14, 0.88)',
@@ -57,13 +57,14 @@ function TopNav() {
       }}
     >
       {/* Logo */}
-      <div className="font-display flex flex-col leading-none select-none" style={{ letterSpacing: '2.2px' }}>
+      <div className="font-display flex flex-col leading-none select-none flex-shrink-0" style={{ letterSpacing: '2.2px' }}>
         <span style={{ fontSize: '0.62rem', color: '#00F0FF', fontWeight: 700 }}>ASTRA</span>
         <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.30)', marginTop: '2px' }}>NOVA</span>
       </div>
 
-      {/* Botones de sección */}
-      <div className="flex items-center gap-0.5">
+      {/* Botones de sección — se encogen y, si no entran, se deslizan horizontalmente
+          en vez de salirse de pantalla (fix: quedaban botones inalcanzables en <360px) */}
+      <div className="flex items-center gap-0.5 min-w-0 overflow-x-auto no-scrollbar">
         {navItems.map(item => {
           const isActive = depth === item.layerIndex
           return (
@@ -72,10 +73,10 @@ function TopNav() {
               onClick={() => jumpTo(item.layerIndex)}
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}
-              className="relative px-2 py-1.5 rounded-lg transition-all duration-200 border-0 cursor-pointer font-display"
+              className="relative px-1.5 sm:px-2 py-1.5 rounded-lg transition-all duration-200 border-0 cursor-pointer font-display flex-shrink-0"
               style={{
-                fontSize: '9px',
-                letterSpacing: '1.4px',
+                fontSize: '8.5px',
+                letterSpacing: '1px',
                 color:      isActive ? '#00F0FF' : 'rgba(255,255,255,0.38)',
                 background: isActive ? 'rgba(0,240,255,0.08)' : 'transparent',
                 border:     `1px solid ${isActive ? 'rgba(0,240,255,0.20)' : 'transparent'}`,
