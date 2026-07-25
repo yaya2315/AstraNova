@@ -6,8 +6,7 @@ import AuroraBg from './AuroraBg'
 //
 // Z-index stack inside #premium-bg:
 //   AuroraBg canvas   → auto  (layer 0 — base atmosphere, WebGL)
-//   StarField canvas  → 2     (layer 1 — stars, parallax, bloom, shooting stars)
-//   vignette div      → 6     (layer 2 — edge darkening)
+//   vignette div      → 6     (layer 1 — edge darkening)
 //
 export default function PremiumSpaceExperience() {
   return (

@@ -72,17 +72,6 @@ function Magnetic({ children }: { children: React.ReactNode }) {
   return <div ref={ref} onMouseMove={onMove} onMouseLeave={onLeave}>{children}</div>
 }
 
-// Ambient glow particle
-function GlowDot({ x, y, d, color = 'bg-white/60' }: { x: string; y: string; d: number; color?: string }) {
-  return (
-    <motion.div className={`absolute w-1 h-1 rounded-full pointer-events-none ${color}`}
-      style={{ left: x, top: y }}
-      animate={{ opacity: [0, 1, 0], scale: [0.5, 2, 0.5] }}
-      transition={{ duration: 3.2, repeat: Infinity, delay: d, ease: 'easeInOut' }}
-    />
-  )
-}
-
 // Floating zone label
 function ZoneLabel({ text }: { text: string }) {
   return (
@@ -1644,9 +1633,8 @@ function CodeGame({ color, onComplete }: { color: MissionColorScheme; onComplete
 }
 
 /* ─── Mission card (wraps info + active game) ─────────────────────────────── */
-function MissionCard({ mission, index, colorScheme, icon, gameType, gameLabel, chainMsg, completed, onComplete }: {
+function MissionCard({ mission, colorScheme, icon, gameType, gameLabel, chainMsg, completed, onComplete }: {
   mission: typeof missions[0]
-  index: number
   colorScheme: MissionColorScheme
   icon: React.ReactNode
   gameType: MissionGameType
@@ -1825,7 +1813,7 @@ export function MissionsSection() {
             return (
               <ScaleIn key={m.title} delay={i * 0.07}>
                 <MissionCard
-                  mission={m} index={i} colorScheme={c}
+                  mission={m} colorScheme={c}
                   icon={iconMap[m.icon] ?? iconMap.globe}
                   gameType={GAME_META[i].type}
                   gameLabel={GAME_META[i].label}

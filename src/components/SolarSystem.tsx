@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useRef, useState, useMemo, useCallback, useEffect, memo } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { planets, type PlanetData } from '@/lib/data'
