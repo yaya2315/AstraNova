@@ -1,11 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import dynamic from 'next/dynamic'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import LoadingScreen from '@/components/LoadingScreen'
 import { DeepNavProvider, useDeepNav, LAYERS } from '@/components/DeepNavEngine'
 import PremiumSpaceExperience from '@/components/PremiumSpaceExperience'
 import SideNav from '@/components/SideNav'
+import MiniSolarSystem from '@/components/MiniSolarSystem'
 import { NAV_ITEMS } from '@/lib/navItems'
 import {
   HeroSection,
@@ -29,81 +31,124 @@ const SolarSystem = dynamic(() => import('@/components/SolarSystem'), {
 
 // ── Barra de navegación superior (visible en viewports < lg) ─────────────────
 // Complementa el SideNav que solo aparece en desktop (hidden lg:flex).
-// Los botones llaman a jumpTo() igual que el SideNav.
+// En vez de un hamburger genérico, el propio logo animado (mini sistema solar)
+// es el botón que abre el panel de secciones — único de este sitio.
 function TopNav() {
   const { depth, jumpTo } = useDeepNav()
+  const [open, setOpen] = useState(false)
+  const activeItem = NAV_ITEMS.find(i => i.layerIndex === depth)
 
   return (
-    <motion.nav
-      initial={{ opacity: 0, y: -20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.8, delay: 1.0, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed top-0 left-0 right-0 z-[998] lg:hidden flex items-center justify-between gap-2 px-2 sm:px-4"
-      style={{
-        height: '54px',
-        background: 'rgba(4, 6, 14, 0.88)',
-        backdropFilter: 'blur(28px)',
-        WebkitBackdropFilter: 'blur(28px)',
-        borderBottom: '1px solid rgba(255,255,255,0.07)',
-        boxShadow: '0 4px 32px rgba(0,0,0,0.5)',
-      }}
-    >
-      {/* Logo — punto pulsante como el SideNav, para que no se sienta tan desnudo */}
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <span className="relative flex-shrink-0" style={{ width: 6, height: 6 }}>
-          <span className="absolute inset-0 rounded-full animate-pulse-glow" style={{ background: '#00F0FF' }} />
-        </span>
-        <div className="font-display flex flex-col leading-none select-none" style={{ letterSpacing: '2.2px' }}>
-          <span style={{ fontSize: '0.62rem', color: '#00F0FF', fontWeight: 700 }}>ASTRA</span>
-          <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.30)', marginTop: '2px' }}>NOVA</span>
-        </div>
-      </div>
+    <>
+      <motion.nav
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, delay: 1.0, ease: [0.22, 1, 0.36, 1] }}
+        className="fixed top-0 left-0 right-0 z-[998] lg:hidden flex items-center justify-between gap-2 px-4"
+        style={{
+          height: '54px',
+          background: 'rgba(4, 6, 14, 0.88)',
+          backdropFilter: 'blur(28px)',
+          WebkitBackdropFilter: 'blur(28px)',
+          borderBottom: '1px solid rgba(255,255,255,0.07)',
+          boxShadow: '0 4px 32px rgba(0,0,0,0.5)',
+        }}
+      >
+        {/* Logo animado = botón de menú. El anillo se enciende y la flecha gira
+            cuando el panel está abierto, para que quede claro que es tocable. */}
+        <button
+          onClick={() => setOpen(o => !o)}
+          aria-label={open ? 'Cerrar menú' : 'Abrir menú'}
+          aria-expanded={open}
+          className="flex items-center gap-1.5 flex-shrink-0 border-0 bg-transparent cursor-pointer py-1 -my-1 pr-1"
+        >
+          <MiniSolarSystem size={34} active={open} />
+          <div className="font-display flex flex-col leading-none select-none" style={{ letterSpacing: '2.2px' }}>
+            <span style={{ fontSize: '0.62rem', color: '#00F0FF', fontWeight: 700 }}>ASTRA</span>
+            <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.30)', marginTop: '2px' }}>NOVA</span>
+          </div>
+          <motion.svg
+            width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            className="ml-0.5 flex-shrink-0"
+            style={{ color: open ? '#00F0FF' : 'rgba(255,255,255,0.35)' }}
+            animate={{ rotate: open ? 180 : 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </motion.svg>
+        </button>
 
-      {/* Botones de sección — ícono + etiqueta, con un halo activo que se desliza
-          entre botones (layoutId compartido). Se encogen y, si no entran, la fila
-          se desliza horizontalmente en vez de salirse de pantalla. */}
-      <div className="flex items-center gap-0.5 min-w-0 overflow-x-auto no-scrollbar">
-        {NAV_ITEMS.map(item => {
-          const isActive = depth === item.layerIndex
-          return (
-            <button
-              key={item.layerIndex}
-              onClick={() => jumpTo(item.layerIndex)}
-              aria-label={item.label}
-              aria-current={isActive ? 'page' : undefined}
-              className={`relative flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-full transition-colors duration-200 border-0 cursor-pointer font-display flex-shrink-0 ${
-                isActive ? 'text-accent-cyan' : 'text-white/40 hover:text-white/75'
-              }`}
+        {/* Sección activa — reemplaza a la fila de botones que no entraba en pantallas angostas */}
+        {activeItem && (
+          <div className="flex items-center gap-1.5 text-accent-cyan flex-shrink min-w-0">
+            <span className="flex-shrink-0 [&>svg]:w-[13px] [&>svg]:h-[13px]">{activeItem.icon}</span>
+            <span className="font-display truncate" style={{ fontSize: '9px', letterSpacing: '1.4px' }}>{activeItem.label}</span>
+          </div>
+        )}
+
+        {/* Bottom glow line */}
+        <div
+          className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
+          style={{ background: 'linear-gradient(90deg, transparent 5%, rgba(0,240,255,0.18) 50%, transparent 95%)' }}
+        />
+      </motion.nav>
+
+      {/* Panel desplegable de secciones */}
+      <AnimatePresence>
+        {open && (
+          <>
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="fixed inset-0 z-[997] lg:hidden"
+              style={{ background: 'rgba(0,0,4,0.55)', backdropFilter: 'blur(2px)' }}
+              onClick={() => setOpen(false)}
+            />
+            <motion.div
+              key="panel"
+              initial={{ opacity: 0, y: -12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.98 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              className="fixed left-3 right-3 z-[998] lg:hidden rounded-2xl overflow-hidden"
+              style={{
+                top: '62px',
+                background: 'rgba(6, 9, 18, 0.92)',
+                backdropFilter: 'blur(28px)',
+                WebkitBackdropFilter: 'blur(28px)',
+                border: '1px solid rgba(0,240,255,0.14)',
+                boxShadow: '0 16px 48px rgba(0,0,0,0.55), 0 0 40px rgba(0,240,255,0.06)',
+              }}
             >
-              {isActive && (
-                <motion.span
-                  layoutId="topNavActivePill"
-                  className="absolute inset-0 rounded-full pointer-events-none"
-                  style={{
-                    background: 'rgba(0,240,255,0.09)',
-                    border: '1px solid rgba(0,240,255,0.26)',
-                    boxShadow: '0 0 14px rgba(0,240,255,0.16), inset 0 1px 0 rgba(255,255,255,0.06)',
-                  }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                />
-              )}
-              <span className="relative z-[1] flex-shrink-0 [&>svg]:w-[13px] [&>svg]:h-[13px]">
-                {item.icon}
-              </span>
-              <span className="relative z-[1] whitespace-nowrap" style={{ fontSize: '8.5px', letterSpacing: '1px' }}>
-                {item.label}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Bottom glow line */}
-      <div
-        className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
-        style={{ background: 'linear-gradient(90deg, transparent 5%, rgba(0,240,255,0.18) 50%, transparent 95%)' }}
-      />
-    </motion.nav>
+              {NAV_ITEMS.map((item, i) => {
+                const isActive = depth === item.layerIndex
+                return (
+                  <motion.button
+                    key={item.layerIndex}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.03 }}
+                    onClick={() => { jumpTo(item.layerIndex); setOpen(false) }}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`relative w-full flex items-center gap-3 px-5 py-3.5 border-0 cursor-pointer font-display transition-colors ${
+                      isActive ? 'text-accent-cyan bg-accent-cyan/[0.07]' : 'text-white/55 hover:text-white hover:bg-white/[0.03]'
+                    }`}
+                    style={{ borderBottom: i < NAV_ITEMS.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}
+                  >
+                    {isActive && (
+                      <span className="absolute left-0 top-0 bottom-0 w-[2px]" style={{ background: '#00F0FF', boxShadow: '0 0 8px rgba(0,240,255,0.9)' }} />
+                    )}
+                    <span className="flex-shrink-0 [&>svg]:w-[18px] [&>svg]:h-[18px]">{item.icon}</span>
+                    <span style={{ fontSize: '0.75rem', letterSpacing: '2px' }}>{item.label}</span>
+                  </motion.button>
+                )
+              })}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   )
 }
 

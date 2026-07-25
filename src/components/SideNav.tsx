@@ -3,68 +3,7 @@
 import { motion } from 'framer-motion'
 import { useDeepNav } from '@/components/DeepNavEngine'
 import { NAV_ITEMS } from '@/lib/navItems'
-
-function MiniSolarSystem() {
-  return (
-    <div className="relative" style={{ width: 48, height: 48 }}>
-      <div className="absolute inset-0 flex items-center justify-center">
-        {/* Orbit rings */}
-        <div className="absolute rounded-full" style={{ width: 24, height: 24, border: '1px solid rgba(0,240,255,0.14)' }} />
-        <div className="absolute rounded-full" style={{ width: 38, height: 38, border: '1px solid rgba(123,97,255,0.10)' }} />
-        {/* Sun */}
-        <div style={{
-          width: 7, height: 7, borderRadius: '50%',
-          background: 'radial-gradient(circle, #fff8cc 0%, #ffb020 55%, transparent 100%)',
-          boxShadow: '0 0 6px rgba(255,176,32,0.95), 0 0 14px rgba(255,176,32,0.35)',
-        }} />
-      </div>
-
-      {/* Inner planet — cyan */}
-      <motion.div
-        className="absolute inset-0"
-        animate={{ rotate: 360 }}
-        transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
-      >
-        <div style={{
-          position: 'absolute', top: '50%', left: '50%',
-          width: 4, height: 4, borderRadius: '50%',
-          background: '#00F0FF',
-          boxShadow: '0 0 5px rgba(0,240,255,0.95)',
-          transform: 'translate(8px, -2px)',
-        }} />
-      </motion.div>
-
-      {/* Outer planet — purple */}
-      <motion.div
-        className="absolute inset-0"
-        animate={{ rotate: -360 }}
-        transition={{ duration: 6.5, repeat: Infinity, ease: 'linear' }}
-      >
-        <div style={{
-          position: 'absolute', top: '50%', left: '50%',
-          width: 3, height: 3, borderRadius: '50%',
-          background: '#7B61FF',
-          boxShadow: '0 0 4px rgba(123,97,255,0.95)',
-          transform: 'translate(15px, -1.5px)',
-        }} />
-      </motion.div>
-
-      {/* Third planet — teal, slow outer-outer orbit */}
-      <motion.div
-        className="absolute inset-0"
-        animate={{ rotate: 360 }}
-        transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
-      >
-        <div style={{
-          position: 'absolute', top: '50%', left: '50%',
-          width: 2.5, height: 2.5, borderRadius: '50%',
-          background: 'rgba(0,240,255,0.55)',
-          transform: 'translate(17px, 3px)',
-        }} />
-      </motion.div>
-    </div>
-  )
-}
+import MiniSolarSystem from '@/components/MiniSolarSystem'
 
 export default function SideNav() {
   // Reemplaza el tracking por scroll con el estado de profundidad del motor.
