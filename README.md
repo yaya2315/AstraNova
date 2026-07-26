@@ -33,11 +33,14 @@ Formas de abrirlo fácil en VS Code:
 
 Cada vez que cambies algo en `src/`, corré `npm run build` de nuevo para regenerar `out/` con los cambios.
 
-### Archivos a mano: `out/style.css` y `out/js/`
+### Archivos a mano: `./index.html`, `./style.css` y `./js/`
 
-Next.js necesita que el CSS y el JS reales vivan en `out/_next/static/...` con nombres hasheados — su propio motor de carga de módulos depende de esas rutas exactas, así que esos son los que de verdad usa el sitio. Para no tener que andar buscando entre carpetas anidadas, cada `npm run build` genera además copias con nombres simples en la raíz de `out/`:
+Next.js necesita que el HTML/CSS/JS **reales** vivan dentro de `out/` (rutas tipo `out/_next/static/...`, con nombres hasheados) — su propio motor de carga de módulos depende de esas rutas exactas, así que eso es lo que de verdad usa el sitio para funcionar.
 
-- `out/style.css` — todo el CSS ya compilado, en un solo archivo.
-- `out/js/` — cada archivo JS (Next separa el código en varios para cargar más rápido), con nombres planos, sin subcarpetas.
+Para tenerlos a mano sin andar abriendo `out/`, cada `npm run build` además copia esos mismos archivos **afuera de `out/`, directo en la raíz del proyecto**:
 
-Son copias de solo lectura para inspeccionar o abrir rápido — el sitio sigue funcionando desde `out/_next/`, así que editar los archivos de `out/js/`/`out/style.css` no cambia nada; hay que editar `src/` y volver a correr `npm run build`.
+- `index.html` — copia del HTML compilado.
+- `style.css` — todo el CSS ya compilado, en un solo archivo.
+- `js/` — cada archivo JS (Next separa el código en varios para cargar más rápido), con nombres planos, sin subcarpetas.
+
+Son copias de solo lectura para inspeccionar o abrir rápido en el editor — **no son un sitio funcional por sí solas** (el `index.html` de la raíz sigue apuntando a `/_next/...`, que solo existe dentro de `out/`). Para ver el sitio corriendo de verdad, seguí usando `out/` (Live Server sobre `out/index.html`, o `npm run start`). Editar `./js/`, `./style.css` o `./index.html` no cambia nada — hay que editar `src/` y volver a correr `npm run build`.
