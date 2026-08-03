@@ -5,6 +5,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { planets, type PlanetData } from '@/lib/data'
+import PlanetSurfaceView from './PlanetSurface'
 
 const ORBIT_SEGMENTS = 64
 const PLANET_SEGMENTS = 32
@@ -386,11 +387,11 @@ function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick }: {
   )
 }
 
-/* ====== EXPLORACION VIEW — fullscreen overlay ====== */
 /* ====== PLANET DETAIL PANEL ====== */
-function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
-  planet: PlanetData; onClose: () => void; onPrev: () => void; onNext: () => void
+function PlanetDetailPanel({ planet, onClose, onPrev, onNext, onLand }: {
+  planet: PlanetData; onClose: () => void; onPrev: () => void; onNext: () => void; onLand: () => void
 }) {
+  const rocoso = planet.type.includes('ROCOSO')
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center p-4" onClick={onClose}>
       <div className="glass-strong rounded-3xl max-w-[900px] w-full max-h-[85vh] overflow-y-auto p-5 sm:p-8 relative"
@@ -441,6 +442,20 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
               ))}
             </div>
 
+            <button onClick={onLand}
+              className="mt-5 flex items-center gap-2 px-5 py-2.5 rounded-full border transition-all hover:brightness-125"
+              style={{ borderColor: `${planet.color}55`, background: `${planet.color}14`, color: planet.color }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {rocoso
+                  ? <path d="M12 2v14m0 0l-5-5m5 5l5-5M3 21h18" strokeLinecap="round" strokeLinejoin="round" />
+                  : <><path d="M3 15c2-2 4-3 9-3s7 1 9 3" /><path d="M3 10c2-2 4-3 9-3s7 1 9 3" /></>
+                }
+              </svg>
+              <span className="font-display text-[0.65rem] tracking-[2px]">
+                {rocoso ? 'ATERRIZAR EN LA SUPERFICIE' : 'ENTRAR A LA ATMÓSFERA'}
+              </span>
+            </button>
+
           </div>
         </div>
       </div>
@@ -482,6 +497,7 @@ export default function SolarSystem() {
   const [, forceTooltip] = useState(0)
   const [speed, setSpeed] = useState(1)
   const [immersive, setImmersive] = useState(false)
+  const [exploring, setExploring] = useState(false)
 
   const toggleImmersive = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -502,6 +518,7 @@ export default function SolarSystem() {
     const idx = planets.findIndex(p => p.name === selected.name)
     const next = (idx + dir + planets.length) % planets.length
     setSelected(planets[next])
+    setExploring(false)
   }, [selected])
 
   const handleHover = useCallback((d: PlanetData) => setHovered(d), [])
@@ -568,8 +585,12 @@ export default function SolarSystem() {
       )}
 
       {selected && (
-        <PlanetDetailPanel planet={selected} onClose={() => setSelected(null)}
-          onPrev={() => navigate(-1)} onNext={() => navigate(1)} />
+        <PlanetDetailPanel planet={selected} onClose={() => { setSelected(null); setExploring(false) }}
+          onPrev={() => navigate(-1)} onNext={() => navigate(1)} onLand={() => setExploring(true)} />
+      )}
+
+      {selected && exploring && (
+        <PlanetSurfaceView planet={selected} onExit={() => setExploring(false)} />
       )}
 
       <div className="absolute bottom-5 left-1/2 -translate-x-1/2 font-display text-[0.55rem] tracking-[3px] text-slate-600 flex items-center gap-2.5 z-10">
