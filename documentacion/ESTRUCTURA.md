@@ -33,7 +33,7 @@ Astra Nova t-box/
 │   │
 │   ├── components/             ← Piezas visuales (componentes React)
 │   │   ├── DeepNavEngine.tsx           [TSX] Motor de navegación por "capas" (scroll infinito con zoom)
-│   │   ├── SolarSystem.tsx             [TSX] Sistema solar 3D interactivo (Three.js / WebGL), texturas procedurales
+│   │   ├── SolarSystem.tsx             [TSX] Sistema solar 3D interactivo (Three.js / WebGL), texturas reales de public/textures/
 │   │   ├── Sections.tsx                [TSX] Secciones: Hero, Historia, Constelaciones, Galería, Misiones, Footer
 │   │   ├── SideNav.tsx                 [TSX] Navegación lateral de escritorio (hidden lg:flex)
 │   │   ├── MiniSolarSystem.tsx         [TSX] Logo animado (3 planetas orbitando), compartido por SideNav y TopNav
@@ -42,18 +42,23 @@ Astra Nova t-box/
 │   │   └── LoadingScreen.tsx           [TSX] Pantalla de carga inicial
 │   │
 │   └── lib/                    ← Datos y configuración
-│       ├── data.ts             [TS]  Planetas, constelaciones, misiones, galería
+│       ├── data.ts             [TS]  Planetas (con textureUrl), constelaciones, misiones, galería
 │       └── navItems.tsx        [TSX] Ítems del menú (label + ícono + capa) compartidos entre SideNav y TopNav
+│
+├── public/                     ← Assets estáticos que Next.js sirve tal cual en /
+│   └── textures/                8 texturas JPG reales (2K–8K) del sol, planetas y anillo de Saturno
 │
 ├── style-general.css           [CSS] Estilos globales: colores, botones, glass, animaciones, deep-nav
 ├── next.config.ts              [TS] Configuración de Next.js (output: 'export' → genera out/)
 ├── tailwind.config.ts          [TS] Configuración de Tailwind CSS (utilidades de estilo)
 ├── tsconfig.json               [JSON] Configuración de TypeScript (lenguaje)
 ├── package.json                [JSON] Lista de dependencias y scripts del proyecto
+├── scripts/postbuild.mjs       [MJS] Corre después de cada build: renombra el HTML/CSS reales a rey.html/rey.css
+│                                     y deja copias de referencia en web/ (afuera de out/)
 └── documentacion/ESTRUCTURA.md ← Este archivo
 ```
 
-No hay carpeta `public/` — el sistema solar 3D no usa imágenes de textura, genera todo (sol, planetas, anillos) con `<canvas>` en tiempo de ejecución (ver `getPlanetTexture`/`getSunTexture`/`getRingAlphaTexture` en `SolarSystem.tsx`).
+El sistema solar 3D carga las texturas reales de `public/textures/*.jpg` vía `THREE.TextureLoader` (función `loadTexture` en `SolarSystem.tsx`) — no genera nada por canvas.
 
 ---
 

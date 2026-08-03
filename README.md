@@ -10,6 +10,7 @@ Plataforma web inmersiva de exploración espacial construida con **Next.js + Rea
 | `src/app/page.tsx` | Página principal — ordena todas las secciones |
 | `src/components/` | Componentes React (secciones, sistema solar 3D, fondo animado, navegación) |
 | `src/lib/` | Datos (planetas, misiones, constelaciones) e ítems del menú |
+| `public/textures/` | Texturas JPG reales del sistema solar 3D (sol, planetas, anillo de Saturno) |
 | `style-general.css` | Estilos globales (importado desde `layout.tsx`) |
 
 Ver [documentacion/ESTRUCTURA.md](documentacion/ESTRUCTURA.md) para el detalle completo de componentes.
@@ -42,10 +43,10 @@ De todos los archivos que genera el build, **solo hay un HTML real y un CSS real
 
 El **JS no tiene un único "rey"**: Next.js separa el código en 19 archivos a propósito (carga más rápido, cada sección pesada como el sistema solar 3D se descarga solo cuando el usuario navega ahí). El archivo que carga y coordina a todos los demás es `webpack-*.js` (el runtime de módulos) — es lo más parecido a un "JS rey" conceptualmente, pero **no se puede renombrar**: tiene el mapeo `nombre de chunk → archivo` grabado adentro, y los otros 18 archivos están referenciados desde ahí. Ya se probó forzar esto (ver historial de commits) y rompió el build por completo.
 
-Además, cada `npm run build` deja copias de referencia sueltas en la **raíz del proyecto** (afuera de `out/`), con los mismos nombres:
+Además, cada `npm run build` deja copias de referencia dentro de **`web/`** en la raíz del proyecto (afuera de `out/`) — todas juntas en una sola carpeta en vez de sueltas, para no ensuciar la raíz junto a `package.json`, `src/`, etc.:
 
-- `rey.html` — copia del HTML real.
-- `rey.css` — copia del CSS real.
-- `js/` — los 19 archivos JS reales, tal cual, sin subcarpetas.
+- `web/rey.html` — copia del HTML real.
+- `web/rey.css` — copia del CSS real.
+- `web/js/` — los 19 archivos JS reales, tal cual, sin subcarpetas.
 
-Son copias de solo lectura para inspeccionar o abrir rápido en el editor — **no son un sitio funcional por sí solas** (el `rey.html` de la raíz sigue apuntando a `/_next/...`, que solo existe dentro de `out/`). Para ver el sitio corriendo de verdad, seguí usando `out/` (Live Server sobre `out/rey.html`, o `npm run start`). Editar `./js/`, `./rey.css` o `./rey.html` no cambia nada — hay que editar `src/` y volver a correr `npm run build`.
+Son copias de solo lectura para inspeccionar o abrir rápido en el editor — **no son un sitio funcional por sí solas** (el `rey.html` de `web/` sigue apuntando a `/_next/...`, que solo existe dentro de `out/`). Para ver el sitio corriendo de verdad, seguí usando `out/` (Live Server sobre `out/rey.html`, o `npm run start`). Editar `web/js/`, `web/rey.css` o `web/rey.html` no cambia nada — hay que editar `src/` y volver a correr `npm run build`.

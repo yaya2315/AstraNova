@@ -18,157 +18,16 @@ function getSharedSphere(radius: number, seg: number): THREE.SphereGeometry {
   return _sharedGeo.get(k)! as THREE.SphereGeometry
 }
 
-/* ====== PROCEDURAL TEXTURES ======
-   No hay assets de imagen en /public, así que las texturas de planetas, sol
-   y anillos se generan en canvas (mismo enfoque que ya usaba la Luna). */
-function mulberry32(seed: number) {
-  return function () {
-    seed |= 0; seed = (seed + 0x6d2b79f5) | 0
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-function hashSeed(s: string): number {
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
-  return h
-}
-function shade(hex: string, amt: number): string {
-  const hsl = { h: 0, s: 0, l: 0 }
-  new THREE.Color(hex).getHSL(hsl)
-  const l = Math.max(0, Math.min(1, hsl.l + amt))
-  return `#${new THREE.Color().setHSL(hsl.h, hsl.s, l).getHexString()}`
-}
-
-const _planetTex = new Map<string, THREE.CanvasTexture>()
-function getPlanetTexture(data: PlanetData): THREE.CanvasTexture {
-  const cached = _planetTex.get(data.name)
+/* ====== TEXTURE LOADING ====== */
+const _texLoader = new THREE.TextureLoader()
+const _texCache = new Map<string, THREE.Texture>()
+function loadTexture(url: string): THREE.Texture {
+  const cached = _texCache.get(url)
   if (cached) return cached
-
-  const w = 1024, h = 512
-  const c = document.createElement('canvas'); c.width = w; c.height = h
-  const ctx = c.getContext('2d')!
-  const rand = mulberry32(hashSeed(data.name))
-  const base = data.color
-  const isGasOrIce = data.type.includes('GASEOSO') || data.type.includes('HIELO')
-
-  ctx.fillStyle = base
-  ctx.fillRect(0, 0, w, h)
-
-  if (data.name === 'Tierra') {
-    ctx.fillStyle = '#1c5faa'; ctx.fillRect(0, 0, w, h)
-    for (let i = 0; i < 10; i++) {
-      const cx = rand() * w, cy = h * 0.18 + rand() * h * 0.64
-      const rw = 60 + rand() * 170, rh = 40 + rand() * 100
-      ctx.fillStyle = rand() > 0.35 ? '#2e7d4f' : '#8a7a4f'
-      ctx.beginPath(); ctx.ellipse(cx, cy, rw, rh, rand() * Math.PI, 0, Math.PI * 2); ctx.fill()
-    }
-    ctx.globalAlpha = 0.18
-    for (let i = 0; i < 40; i++) {
-      const x = rand() * w, y = rand() * h, r = rand() * 50 + 20
-      ctx.fillStyle = '#ffffff'
-      ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.35, 0, 0, Math.PI * 2); ctx.fill()
-    }
-    ctx.globalAlpha = 1
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'
-    ctx.fillRect(0, 0, w, h * 0.06); ctx.fillRect(0, h * 0.94, w, h * 0.06)
-  } else if (isGasOrIce) {
-    const bands = data.type.includes('GASEOSO') ? 14 : 8
-    for (let b = 0; b < bands; b++) {
-      ctx.fillStyle = shade(base, (rand() - 0.5) * 0.18)
-      ctx.globalAlpha = 0.55
-      ctx.fillRect(0, (b / bands) * h, w, h / bands)
-    }
-    ctx.globalAlpha = 0.08
-    for (let i = 0; i < 1500; i++) {
-      const x = rand() * w, y = rand() * h, r = rand() * 30 + 4
-      ctx.fillStyle = shade(base, (rand() - 0.5) * 0.25)
-      ctx.beginPath(); ctx.ellipse(x, y, r * 2, r * 0.4, 0, 0, Math.PI * 2); ctx.fill()
-    }
-    ctx.globalAlpha = 1
-    if (data.name === 'Júpiter') {
-      const g = ctx.createRadialGradient(w * 0.62, h * 0.55, 0, w * 0.62, h * 0.55, 60)
-      g.addColorStop(0, 'rgba(180,70,40,0.85)'); g.addColorStop(1, 'rgba(180,70,40,0)')
-      ctx.fillStyle = g
-      ctx.beginPath(); ctx.ellipse(w * 0.62, h * 0.55, 55, 28, 0, 0, Math.PI * 2); ctx.fill()
-    }
-  } else {
-    // rocosos: superficie craterizada tintada con el color del planeta
-    for (let i = 0; i < 140; i++) {
-      const cx = rand() * w, cy = rand() * h, r = rand() * 18 + 3
-      const g = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.2, 0, cx, cy, r)
-      g.addColorStop(0, shade(base, 0.15)); g.addColorStop(0.6, shade(base, -0.05)); g.addColorStop(1, 'rgba(0,0,0,0)')
-      ctx.globalAlpha = 0.5
-      ctx.fillStyle = g
-      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill()
-    }
-    ctx.globalAlpha = 1
-  }
-
-  const img = ctx.getImageData(0, 0, w, h)
-  for (let i = 0; i < img.data.length; i += 4) {
-    const n = (rand() - 0.5) * 14
-    img.data[i] = Math.max(0, Math.min(255, img.data[i] + n))
-    img.data[i + 1] = Math.max(0, Math.min(255, img.data[i + 1] + n))
-    img.data[i + 2] = Math.max(0, Math.min(255, img.data[i + 2] + n))
-  }
-  ctx.putImageData(img, 0, 0)
-
-  const tex = new THREE.CanvasTexture(c)
+  const tex = _texLoader.load(url)
   tex.colorSpace = THREE.SRGBColorSpace
-  _planetTex.set(data.name, tex)
+  _texCache.set(url, tex)
   return tex
-}
-
-let _sunTex: THREE.CanvasTexture | null = null
-function getSunTexture(): THREE.CanvasTexture {
-  if (_sunTex) return _sunTex
-  const w = 1024, h = 512
-  const c = document.createElement('canvas'); c.width = w; c.height = h
-  const ctx = c.getContext('2d')!
-  const rand = mulberry32(7)
-  ctx.fillStyle = '#ff9d2e'; ctx.fillRect(0, 0, w, h)
-  for (let i = 0; i < 400; i++) {
-    const x = rand() * w, y = rand() * h, r = rand() * 50 + 10
-    const light = rand() > 0.5
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
-    g.addColorStop(0, light ? 'rgba(255,240,180,0.5)' : 'rgba(200,60,0,0.4)')
-    g.addColorStop(1, 'rgba(255,157,46,0)')
-    ctx.fillStyle = g
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill()
-  }
-  const img = ctx.getImageData(0, 0, w, h)
-  for (let i = 0; i < img.data.length; i += 4) {
-    const n = (rand() - 0.5) * 20
-    img.data[i] = Math.max(0, Math.min(255, img.data[i] + n))
-    img.data[i + 1] = Math.max(0, Math.min(255, img.data[i + 1] + n * 0.7))
-    img.data[i + 2] = Math.max(0, Math.min(255, img.data[i + 2] + n * 0.3))
-  }
-  ctx.putImageData(img, 0, 0)
-  _sunTex = new THREE.CanvasTexture(c)
-  _sunTex.colorSpace = THREE.SRGBColorSpace
-  return _sunTex
-}
-
-let _ringTex: THREE.CanvasTexture | null = null
-function getRingAlphaTexture(): THREE.CanvasTexture {
-  if (_ringTex) return _ringTex
-  const w = 512, h = 16
-  const c = document.createElement('canvas'); c.width = w; c.height = h
-  const ctx = c.getContext('2d')!
-  const rand = mulberry32(42)
-  for (let x = 0; x < w; x++) {
-    const t = x / w
-    let v = Math.sin(t * Math.PI) * 200 + (rand() - 0.5) * 40
-    if (t > 0.55 && t < 0.6) v *= 0.15
-    if (t > 0.75 && t < 0.78) v *= 0.4
-    v = Math.max(0, Math.min(255, v))
-    ctx.fillStyle = `rgb(${v},${v},${v})`
-    ctx.fillRect(x, 0, 1, h)
-  }
-  _ringTex = new THREE.CanvasTexture(c)
-  return _ringTex
 }
 
 /* ====== SOLAR ERUPTION PARTICLES ====== */
@@ -255,7 +114,7 @@ const Sun = memo(function Sun() {
   const eruptT   = useRef(0)
   const [erupting, setErupting] = useState(false)
 
-  const texture = useMemo(() => getSunTexture(), [])
+  const texture = useMemo(() => loadTexture('/textures/8k_sun.jpg'), [])
 
   const glowTex = useMemo(() => {
     const c = document.createElement('canvas'); c.width = 128; c.height = 128
@@ -320,7 +179,7 @@ function Planet({ data, speedMul, onHover, onLeave, onClick }: {
   const meshRef = useRef<THREE.Mesh>(null!)
   const [hovered, setHovered] = useState(false)
 
-  const texture = useMemo(() => getPlanetTexture(data), [data])
+  const texture = useMemo(() => loadTexture(data.textureUrl), [data.textureUrl])
   const emissiveColor = useMemo(() => new THREE.Color(data.color), [data.color])
   const mainGeo = useMemo(() => getSharedSphere(data.size, PLANET_SEGMENTS), [data.size])
   const rimGeo = useMemo(() => getSharedSphere(data.size, 16), [data.size])
@@ -381,7 +240,7 @@ function Planet({ data, speedMul, onHover, onLeave, onClick }: {
 /* ====== SATURN RINGS ====== */
 const SaturnRings = memo(function SaturnRings({ size }: { size: number }) {
   const innerR = size * 1.3, outerR = size * 2.4
-  const ringTex = useMemo(() => getRingAlphaTexture(), [])
+  const ringTex = useMemo(() => loadTexture('/textures/8k_saturn_ring_alpha.jpg'), [])
 
   const geo = useMemo(() => {
     const g = new THREE.RingGeometry(innerR, outerR, 48)
@@ -591,7 +450,7 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
 
 function PlanetDetailMesh({ data }: { data: PlanetData }) {
   const ref = useRef<THREE.Mesh>(null!)
-  const texture = useMemo(() => getPlanetTexture(data), [data])
+  const texture = useMemo(() => loadTexture(data.textureUrl), [data.textureUrl])
   const emissiveColor = useMemo(() => new THREE.Color(data.color), [data.color])
   useFrame(() => { ref.current.rotation.y += 0.004 })
   const scaledSize = Math.min(data.size * 1.8, 2)

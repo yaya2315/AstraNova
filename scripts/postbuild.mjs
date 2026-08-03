@@ -15,7 +15,9 @@
 // originales, anidados en _next/static/chunks/ como Next.js los necesita.
 //
 // Además, deja copias de referencia (rey.html, rey.css, y los JS reales tal cual)
-// sueltas en la raíz del proyecto, afuera de out/, para tenerlas a mano.
+// dentro de ./web/ en la raíz del proyecto (afuera de out/) — todas juntas en
+// una sola carpeta en vez de sueltas al nivel principal, para que no ensucien
+// la raíz junto a package.json, src/, etc.
 import { readdirSync, statSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs'
 import { join, basename } from 'node:path'
 
@@ -62,15 +64,18 @@ writeFileSync(join(OUT, 'serve.json'), JSON.stringify({
   rewrites: [{ source: '/', destination: '/rey.html' }],
 }, null, 2))
 
-// ── 4. Copias de referencia sueltas en la raíz del proyecto (afuera de out/) ─
-copyFileSync(reyHtmlPath, join(ROOT, 'rey.html'))
-if (cssRenamed) copyFileSync(join(CSS_DIR, 'rey.css'), join(ROOT, 'rey.css'))
+// ── 4. Copias de referencia, todas juntas en ./web/ (afuera de out/) ─────────
+const WEB_DIR = join(ROOT, 'web')
+rmSync(WEB_DIR, { recursive: true, force: true })
+mkdirSync(WEB_DIR, { recursive: true })
 
-const jsOutDir = join(ROOT, 'js')
-rmSync(jsOutDir, { recursive: true, force: true })
+copyFileSync(reyHtmlPath, join(WEB_DIR, 'rey.html'))
+if (cssRenamed) copyFileSync(join(CSS_DIR, 'rey.css'), join(WEB_DIR, 'rey.css'))
+
+const jsOutDir = join(WEB_DIR, 'js')
 mkdirSync(jsOutDir, { recursive: true })
 const jsFiles = walk(NEXT_STATIC).filter(f => f.endsWith('.js'))
 for (const f of jsFiles) copyFileSync(f, join(jsOutDir, basename(f)))
 
 console.log(`[postbuild] out/rey.html, out/_next/static/css/rey.css — renombrados y parcheados`)
-console.log(`[postbuild] raíz del proyecto: ./rey.html, ./rey.css, ./js/ (${jsFiles.length} archivos, siguen anidados por diseño de Next.js)`)
+console.log(`[postbuild] ./web/ (raíz del proyecto): rey.html, rey.css, js/ (${jsFiles.length} archivos, siguen anidados por diseño de Next.js)`)
