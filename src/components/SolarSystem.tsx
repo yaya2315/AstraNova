@@ -5,11 +5,12 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Stars, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { planets, type PlanetData } from '@/lib/data'
-import PlanetFlybyView from './PlanetFlyby'
+import SystemFlybyView from './SystemFlyby'
 
 const ORBIT_SEGMENTS = 64
 const PLANET_SEGMENTS = 32
 const DETAIL_SEGMENTS = 48
+export const SUN_RADIUS = 2.5
 
 /* ====== SHARED GEOMETRIES ====== */
 const _sharedGeo = new Map<string, THREE.BufferGeometry>()
@@ -108,7 +109,7 @@ function SolarEruption({ active }: { active: boolean }) {
 }
 
 /* ====== SUN ====== */
-const Sun = memo(function Sun() {
+export const Sun = memo(function Sun() {
   const ref      = useRef<THREE.Mesh>(null!)
   const glowRef  = useRef<THREE.Sprite>(null!)
   const lightRef = useRef<THREE.PointLight>(null!)
@@ -155,7 +156,7 @@ const Sun = memo(function Sun() {
     <group>
       <mesh
         ref={ref}
-        geometry={getSharedSphere(2.5, PLANET_SEGMENTS)}
+        geometry={getSharedSphere(SUN_RADIUS, PLANET_SEGMENTS)}
         onClick={(e) => { e.stopPropagation(); if (!erupting) { eruptT.current = 0; setErupting(true) } }}
         onPointerOver={() => { document.body.style.cursor = 'crosshair' }}
         onPointerOut={() => { document.body.style.cursor = '' }}
@@ -176,13 +177,13 @@ const Sun = memo(function Sun() {
    `data.orbit` sigue jugando el rol de semieje mayor (a) — con e pequeño el radio
    medio apenas cambia respecto al círculo anterior, pero la excentricidad real de
    cada planeta ya se nota (Mercurio visiblemente más elíptico que Venus, etc). */
-function orbitRadiusAt(data: PlanetData, theta: number): number {
+export function orbitRadiusAt(data: PlanetData, theta: number): number {
   const e = data.eccentricity
   return (data.orbit * (1 - e * e)) / (1 + e * Math.cos(theta))
 }
 
 /* ====== PLANET ====== */
-function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef }: {
+export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef }: {
   data: PlanetData; speedMul: number
   onHover: (d: PlanetData) => void; onLeave: () => void; onClick: (d: PlanetData) => void
   registerRef: (name: string, obj: THREE.Object3D | null) => void
@@ -346,7 +347,7 @@ function Moon({ moon, speedMul }: { moon: { size: number; orbit: number; speed: 
 }
 
 /* ====== ORBIT PATHS (single instanced draw) ====== */
-const OrbitPaths = memo(function OrbitPaths() {
+export const OrbitPaths = memo(function OrbitPaths() {
   const ref = useRef<THREE.LineSegments>(null!)
   const geo = useMemo(() => {
     const allVerts: number[] = []
@@ -372,7 +373,7 @@ const OrbitPaths = memo(function OrbitPaths() {
 })
 
 /* ====== ASTEROID BELT ====== */
-const AsteroidBelt = memo(function AsteroidBelt() {
+export const AsteroidBelt = memo(function AsteroidBelt() {
   const positions = useMemo(() => {
     const p = new Float32Array(400 * 3)
     for (let i = 0; i < 400; i++) {
@@ -469,8 +470,8 @@ function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick, flyTarge
 }
 
 /* ====== PLANET DETAIL PANEL ====== */
-function PlanetDetailPanel({ planet, onClose, onPrev, onNext, onFlyby }: {
-  planet: PlanetData; onClose: () => void; onPrev: () => void; onNext: () => void; onFlyby: () => void
+function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
+  planet: PlanetData; onClose: () => void; onPrev: () => void; onNext: () => void
 }) {
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center p-4" onClick={onClose}>
@@ -521,20 +522,6 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext, onFlyby }: {
                 </div>
               ))}
             </div>
-
-            <button onClick={onFlyby}
-              className="mt-5 flex items-center gap-2 px-5 py-2.5 rounded-full border transition-all hover:brightness-125"
-              style={{ borderColor: `${planet.color}55`, background: `${planet.color}14`, color: planet.color }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-                <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-                <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
-                <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
-              </svg>
-              <span className="font-display text-[0.65rem] tracking-[2px]">
-                SOBREVOLAR EL PLANETA
-              </span>
-            </button>
 
           </div>
         </div>
@@ -688,12 +675,25 @@ export default function SolarSystem() {
 
       {selected && !flying && (
         <PlanetDetailPanel planet={selected} onClose={() => { setSelected(null); setFlyTarget(null) }}
-          onPrev={() => navigate(-1)} onNext={() => navigate(1)} onFlyby={() => setFlying(true)} />
+          onPrev={() => navigate(-1)} onNext={() => navigate(1)} />
       )}
 
-      {selected && flying && (
-        <PlanetFlybyView planet={selected} onExit={() => setFlying(false)} />
+      {/* Pilotear nave — un solo modo de vuelo libre por TODO el sistema, no atado
+          a ningún planeta en particular (independiente de `selected`). */}
+      {!flying && (
+        <button onClick={() => setFlying(true)}
+          className="absolute bottom-5 right-4 z-20 flex items-center gap-2 glass rounded-full px-3 sm:px-4 py-2 text-accent-cyan hover:brightness-125 transition-all border border-accent-cyan/20">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+            <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+            <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+            <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+            <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+          </svg>
+          <span className="hidden sm:inline font-display text-[0.6rem] tracking-[2px] whitespace-nowrap">PILOTEAR NAVE</span>
+        </button>
       )}
+
+      {flying && <SystemFlybyView onExit={() => setFlying(false)} />}
 
       <div className="absolute bottom-5 left-1/2 -translate-x-1/2 font-display text-[0.55rem] tracking-[3px] text-slate-600 flex items-center gap-2.5 z-10">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
