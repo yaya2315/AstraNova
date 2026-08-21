@@ -23,6 +23,9 @@ export interface PlanetData {
   moon?: MoonData
   color: string
   textureUrl: string
+  /** Excentricidad orbital real (0 = círculo perfecto). Valores reales de la NASA,
+   *  usados en la fórmula polar r(θ) = a(1-e²)/(1+e·cosθ) con el Sol en el foco. */
+  eccentricity: number
 }
 
 export const planets: PlanetData[] = [
@@ -36,6 +39,7 @@ export const planets: PlanetData[] = [
     offset: 0,
     color: '#A0937E',
     textureUrl: '/textures/2k_mercury.jpg',
+    eccentricity: 0.206,
     desc: 'El planeta más pequeño y cercano al Sol.',
     longDesc: 'Mercurio es el planeta más pequeño del sistema solar y el más cercano al Sol. Su superficie está cubierta de cráteres. No tiene atmósfera significativa, causando temperaturas extremas: 430°C de día y -180°C de noche.',
     stats: [
@@ -57,6 +61,7 @@ export const planets: PlanetData[] = [
     offset: 1.2,
     color: '#E8C080',
     textureUrl: '/textures/4k_venus_atmosphere.jpg',
+    eccentricity: 0.007,
     desc: 'El planeta más caliente con atmósfera densa.',
     longDesc: 'Venus es el planeta más caliente del sistema solar. Su densa atmósfera de CO2 atrapa el calor hasta 462°C. Gira en sentido contrario al resto de planetas y un día venusino dura más que su año.',
     stats: [
@@ -78,6 +83,7 @@ export const planets: PlanetData[] = [
     offset: 2.5,
     color: '#4A90D9',
     textureUrl: '/textures/8k_earth_daymap.jpg',
+    eccentricity: 0.017,
     desc: 'Nuestro hogar. El único planeta con vida conocida.',
     longDesc: 'La Tierra es el tercer planeta del sistema solar y el único conocido que alberga vida. Con un 71% de su superficie cubierta por océanos, su campo magnético y atmósfera rica en oxígeno protegen toda forma de vida conocida.',
     stats: [
@@ -100,6 +106,7 @@ export const planets: PlanetData[] = [
     offset: 3.8,
     color: '#D07040',
     textureUrl: '/textures/8k_mars.jpg',
+    eccentricity: 0.093,
     desc: 'El planeta rojo. Objetivo de exploración humana.',
     longDesc: 'Marte es conocido como el planeta rojo por el óxido de hierro en su superficie. Posee el volcán más grande del sistema solar, Olympus Mons, y el cañón Valles Marineris. Evidencias sugieren que tuvo agua líquida en el pasado.',
     stats: [
@@ -121,6 +128,7 @@ export const planets: PlanetData[] = [
     offset: 0.8,
     color: '#C88B60',
     textureUrl: '/textures/8k_jupiter.jpg',
+    eccentricity: 0.048,
     desc: 'El gigante del sistema solar. La Gran Mancha Roja.',
     longDesc: 'Júpiter es el planeta más grande del sistema solar, con masa mayor que todos los demás planetas juntos. Su Gran Mancha Roja es una tormenta activa por más de 350 años. Posee 95 lunas, entre ellas Ganímedes, la luna más grande del sistema solar.',
     stats: [
@@ -144,6 +152,7 @@ export const planets: PlanetData[] = [
     rings: true,
     color: '#F0D8A8',
     textureUrl: '/textures/8k_saturn.jpg',
+    eccentricity: 0.056,
     desc: 'Famoso por sus espectaculares anillos de hielo.',
     longDesc: 'Saturno es reconocido por sus impresionantes anillos de hielo y roca. Es el segundo planeta más grande y tiene una densidad tan baja que flotaría en el agua. Su luna Titán tiene una atmósfera densa y lagos de metano líquido.',
     stats: [
@@ -165,6 +174,7 @@ export const planets: PlanetData[] = [
     offset: 2.1,
     color: '#7BCAE0',
     textureUrl: '/textures/2k_uranus.jpg',
+    eccentricity: 0.046,
     desc: 'El planeta inclinado. Rota de lado.',
     longDesc: 'Urano es un gigante de hielo con su eje inclinado casi 98°, por lo que ruede de lado alrededor del Sol. Su atmósfera de metano le da su color azul-verdoso característico. Tiene 27 lunas conocidas y un sistema de anillos débiles.',
     stats: [
@@ -186,6 +196,7 @@ export const planets: PlanetData[] = [
     offset: 0.7,
     color: '#4080D0',
     textureUrl: '/textures/2k_neptune.jpg',
+    eccentricity: 0.010,
     desc: 'El más lejano. Vientos de 2,100 km/h.',
     longDesc: 'Neptuno es el planeta más lejano del sistema solar con los vientos más rápidos: hasta 2,100 km/h. Su color azul intenso se debe al metano en su atmósfera. Posee 16 lunas conocidas, siendo Tritón la más grande.',
     stats: [

@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useRef, useState, useMemo, useCallback, useEffect, memo } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Stars, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { planets, type PlanetData } from '@/lib/data'
@@ -171,10 +171,21 @@ const Sun = memo(function Sun() {
   )
 })
 
+/* ====== ÓRBITA ======
+   Elipse real con el Sol en el foco (no en el centro): r(θ) = a(1-e²)/(1+e·cosθ).
+   `data.orbit` sigue jugando el rol de semieje mayor (a) — con e pequeño el radio
+   medio apenas cambia respecto al círculo anterior, pero la excentricidad real de
+   cada planeta ya se nota (Mercurio visiblemente más elíptico que Venus, etc). */
+function orbitRadiusAt(data: PlanetData, theta: number): number {
+  const e = data.eccentricity
+  return (data.orbit * (1 - e * e)) / (1 + e * Math.cos(theta))
+}
+
 /* ====== PLANET ====== */
-function Planet({ data, speedMul, onHover, onLeave, onClick }: {
+function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef }: {
   data: PlanetData; speedMul: number
   onHover: (d: PlanetData) => void; onLeave: () => void; onClick: (d: PlanetData) => void
+  registerRef: (name: string, obj: THREE.Object3D | null) => void
 }) {
   const groupRef = useRef<THREE.Group>(null!)
   const meshRef = useRef<THREE.Mesh>(null!)
@@ -184,12 +195,24 @@ function Planet({ data, speedMul, onHover, onLeave, onClick }: {
   const emissiveColor = useMemo(() => new THREE.Color(data.color), [data.color])
   const mainGeo = useMemo(() => getSharedSphere(data.size, PLANET_SEGMENTS), [data.size])
   const rimGeo = useMemo(() => getSharedSphere(data.size, 16), [data.size])
+  // Hitbox de click más grande que el mesh visible — sin esto, planetas chicos
+  // (Mercurio) son casi imposibles de acertar con el mouse/dedo.
+  const hitboxGeo = useMemo(() => getSharedSphere(Math.max(data.size * 1.8, 0.55), 12), [data.size])
+
+  // Registra el group en un Map compartido (Scene) para que la cámara pueda
+  // "perseguir" la posición real del planeta cuadro a cuadro (ver CameraFlyTo).
+  useEffect(() => {
+    registerRef(data.name, groupRef.current)
+    return () => registerRef(data.name, null)
+  }, [data.name, registerRef])
 
   const accTime = useRef(data.offset)
   useFrame((_, delta) => {
     accTime.current += delta * data.speed * speedMul
-    groupRef.current.position.x = Math.cos(accTime.current) * data.orbit
-    groupRef.current.position.z = Math.sin(accTime.current) * data.orbit
+    const theta = accTime.current
+    const r = orbitRadiusAt(data, theta)
+    groupRef.current.position.x = Math.cos(theta) * r
+    groupRef.current.position.z = Math.sin(theta) * r
     meshRef.current.rotation.y += 0.005 * speedMul
   })
 
@@ -207,8 +230,9 @@ function Planet({ data, speedMul, onHover, onLeave, onClick }: {
 
   return (
     <group ref={groupRef}>
-      <mesh ref={meshRef} geometry={mainGeo} onPointerOver={handleOver} onPointerOut={handleOut} onClick={handleClick}
-        scale={hovered ? 1.2 : 1}>
+      {/* Hitbox invisible: capta el raycast de hover/click, más generoso que el mesh visible */}
+      <mesh geometry={hitboxGeo} onPointerOver={handleOver} onPointerOut={handleOut} onClick={handleClick} visible={false} />
+      <mesh ref={meshRef} geometry={mainGeo} scale={hovered ? 1.2 : 1}>
         <meshStandardMaterial
           map={texture}
           roughness={data.orbit < 20 ? 0.85 : 0.55}
@@ -330,8 +354,9 @@ const OrbitPaths = memo(function OrbitPaths() {
       for (let i = 0; i < ORBIT_SEGMENTS; i++) {
         const a1 = (i / ORBIT_SEGMENTS) * Math.PI * 2
         const a2 = ((i + 1) / ORBIT_SEGMENTS) * Math.PI * 2
-        allVerts.push(Math.cos(a1) * p.orbit, 0, Math.sin(a1) * p.orbit)
-        allVerts.push(Math.cos(a2) * p.orbit, 0, Math.sin(a2) * p.orbit)
+        const r1 = orbitRadiusAt(p, a1), r2 = orbitRadiusAt(p, a2)
+        allVerts.push(Math.cos(a1) * r1, 0, Math.sin(a1) * r1)
+        allVerts.push(Math.cos(a2) * r2, 0, Math.sin(a2) * r2)
       }
     }
     const g = new THREE.BufferGeometry()
@@ -366,10 +391,64 @@ const AsteroidBelt = memo(function AsteroidBelt() {
   )
 })
 
-/* ====== SCENE ====== */
-function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick }: {
-  speedMul: number; onPlanetHover: (d: PlanetData) => void; onPlanetLeave: () => void; onPlanetClick: (d: PlanetData) => void
+/* ====== TRANSICIÓN DE CÁMARA — "volar" hacia el planeta clickeado ======
+   No usa una animación de un solo tiro: cada cuadro, amortigua (THREE.MathUtils.damp,
+   sin dependencias nuevas tipo GSAP/Tween) el `target` de OrbitControls y la posición
+   de la cámara hacia la posición ACTUAL del planeta (que sigue orbitando), leída del
+   Map de refs que registra cada <Planet>. Así la cámara persigue correctamente incluso
+   mientras el planeta se mueve durante la transición. */
+const FLY_LAMBDA = 3.2 // suavizado — más alto = llega más rápido
+
+function CameraFlyTo({ controlsRef, planetRefs, flyTarget }: {
+  controlsRef: React.RefObject<any>
+  planetRefs: React.RefObject<Map<string, THREE.Object3D>>
+  flyTarget: string | null
 }) {
+  const { camera } = useThree()
+  const targetPlanet = flyTarget ? planets.find(p => p.name === flyTarget) : null
+
+  useFrame((_, delta) => {
+    const controls = controlsRef.current
+    if (!controls) return
+    const obj = flyTarget ? planetRefs.current?.get(flyTarget) : null
+    const focus = obj ? obj.position : new THREE.Vector3(0, 0, 0)
+
+    controls.target.x = THREE.MathUtils.damp(controls.target.x, focus.x, FLY_LAMBDA, delta)
+    controls.target.y = THREE.MathUtils.damp(controls.target.y, focus.y, FLY_LAMBDA, delta)
+    controls.target.z = THREE.MathUtils.damp(controls.target.z, focus.z, FLY_LAMBDA, delta)
+
+    // Distancia deseada a la cámara: más cerca para planetas chicos, con aire
+    // suficiente para no atravesar la geometría (colisión por distancia mínima).
+    const desiredDistance = obj && targetPlanet
+      ? Math.max(targetPlanet.size * 5.5 + 2.5, 4)
+      : 62 // distancia "de conjunto" cuando no hay planeta seleccionado (vuelve al Sol)
+
+    const dir = camera.position.clone().sub(controls.target).normalize()
+    if (dir.lengthSq() === 0) dir.set(0, 0.4, 1).normalize()
+    const desiredPos = focus.clone().addScaledVector(dir, desiredDistance)
+
+    camera.position.x = THREE.MathUtils.damp(camera.position.x, desiredPos.x, FLY_LAMBDA, delta)
+    camera.position.y = THREE.MathUtils.damp(camera.position.y, desiredPos.y, FLY_LAMBDA, delta)
+    camera.position.z = THREE.MathUtils.damp(camera.position.z, desiredPos.z, FLY_LAMBDA, delta)
+
+    controls.update()
+  })
+
+  return null
+}
+
+/* ====== SCENE ====== */
+function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick, flyTarget }: {
+  speedMul: number; onPlanetHover: (d: PlanetData) => void; onPlanetLeave: () => void; onPlanetClick: (d: PlanetData) => void
+  flyTarget: string | null
+}) {
+  const planetRefs = useRef(new Map<string, THREE.Object3D>())
+  const controlsRef = useRef<any>(null)
+  const registerRef = useCallback((name: string, obj: THREE.Object3D | null) => {
+    if (obj) planetRefs.current.set(name, obj)
+    else planetRefs.current.delete(name)
+  }, [])
+
   return (
     <>
       <ambientLight intensity={0.5} color="#334466" />
@@ -377,12 +456,14 @@ function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick }: {
       <Stars radius={180} depth={80} count={3000} factor={3} saturation={0} />
       <Sun />
       {planets.map((p) => (
-        <Planet key={p.name} data={p} speedMul={speedMul} onHover={onPlanetHover} onLeave={onPlanetLeave} onClick={onPlanetClick} />
+        <Planet key={p.name} data={p} speedMul={speedMul} onHover={onPlanetHover} onLeave={onPlanetLeave}
+          onClick={onPlanetClick} registerRef={registerRef} />
       ))}
       <OrbitPaths />
       <AsteroidBelt />
-      <OrbitControls enableDamping dampingFactor={0.06} enableZoom={false}
+      <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.06} enableZoom={false}
         enablePan={false} maxPolarAngle={Math.PI * 0.48} minPolarAngle={Math.PI * 0.1} />
+      <CameraFlyTo controlsRef={controlsRef} planetRefs={planetRefs} flyTarget={flyTarget} />
     </>
   )
 }
@@ -497,6 +578,8 @@ export default function SolarSystem() {
   const [speed, setSpeed] = useState(1)
   const [immersive, setImmersive] = useState(false)
   const [flying, setFlying] = useState(false)
+  const [flyTarget, setFlyTarget] = useState<string | null>(null)
+  const flyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const toggleImmersive = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -512,17 +595,29 @@ export default function SolarSystem() {
     return () => document.removeEventListener('fullscreenchange', onFs)
   }, [])
 
+  useEffect(() => () => { if (flyTimeoutRef.current) clearTimeout(flyTimeoutRef.current) }, [])
+
   const navigate = useCallback((dir: number) => {
     if (!selected) return
     const idx = planets.findIndex(p => p.name === selected.name)
-    const next = (idx + dir + planets.length) % planets.length
-    setSelected(planets[next])
+    const next = planets[(idx + dir + planets.length) % planets.length]
+    setSelected(next)
+    setFlyTarget(next.name) // la cámara de fondo re-encuadra sin retraso — el panel ya está abierto
     setFlying(false)
   }, [selected])
 
   const handleHover = useCallback((d: PlanetData) => setHovered(d), [])
   const handleLeave = useCallback(() => setHovered(null), [])
-  const handleClick = useCallback((d: PlanetData) => setSelected(d), [])
+
+  // Click desde la vista orbital: primero "vuela" la cámara hacia el planeta y,
+  // recién al llegar (ARRIVAL_MS, sincronizado con FLY_LAMBDA), abre el panel de
+  // info — evita que el panel tape la transición que se supone hay que ver.
+  const ARRIVAL_MS = 900
+  const handleClick = useCallback((d: PlanetData) => {
+    setFlyTarget(d.name)
+    if (flyTimeoutRef.current) clearTimeout(flyTimeoutRef.current)
+    flyTimeoutRef.current = setTimeout(() => { setSelected(d); flyTimeoutRef.current = null }, ARRIVAL_MS)
+  }, [])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     mouseRef.current.x = e.clientX
@@ -562,14 +657,22 @@ export default function SolarSystem() {
         ))}
       </div>
 
-      <Canvas camera={{ position: [0, 30, 55], fov: 50 }} dpr={[1, 1.5]}
-        gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2, powerPreference: 'high-performance' }}
-        onPointerMove={handlePointerMove}>
-        <Suspense fallback={null}>
-          <Scene speedMul={speed} onPlanetHover={handleHover} onPlanetLeave={handleLeave}
-            onPlanetClick={handleClick} />
-        </Suspense>
-      </Canvas>
+      {/* Se desmonta por completo mientras se vuela (PlanetFlybyView cubre toda la
+          pantalla igual): evita tener 2 contextos WebGL activos a la vez, que en
+          hardware/navegadores limitados puede agotar el cupo de contextos del
+          navegador y perder uno de los dos (pantalla negra). Al volver, `flyTarget`
+          vive en el padre y sigue intacto, así que la cámara vuelve a enfocar el
+          mismo planeta apenas se remonta — no se pierde el lugar donde estabas. */}
+      {!flying && (
+        <Canvas camera={{ position: [0, 30, 55], fov: 50 }} dpr={[1, 1.5]}
+          gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2, powerPreference: 'high-performance' }}
+          onPointerMove={handlePointerMove}>
+          <Suspense fallback={null}>
+            <Scene speedMul={speed} onPlanetHover={handleHover} onPlanetLeave={handleLeave}
+              onPlanetClick={handleClick} flyTarget={flyTarget} />
+          </Suspense>
+        </Canvas>
+      )}
 
       {hovered && !selected && (
         <div className="fixed z-50 pointer-events-none transition-opacity duration-200"
@@ -584,7 +687,7 @@ export default function SolarSystem() {
       )}
 
       {selected && !flying && (
-        <PlanetDetailPanel planet={selected} onClose={() => setSelected(null)}
+        <PlanetDetailPanel planet={selected} onClose={() => { setSelected(null); setFlyTarget(null) }}
           onPrev={() => navigate(-1)} onNext={() => navigate(1)} onFlyby={() => setFlying(true)} />
       )}
 

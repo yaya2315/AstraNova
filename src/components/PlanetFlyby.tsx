@@ -9,10 +9,13 @@ import type { PlanetData } from '@/lib/data'
 import { loadTexture, SaturnRings } from './SolarSystem'
 
 const PLANET_RADIUS = 8
-const FLY_SPEED = 14        // unidades/segundo
-const MAX_TURN_RATE = 1.6   // rad/s al arrastrar hasta el borde
+const FLY_SPEED = 14         // unidades/segundo
+const MAX_TURN_RATE = 1.6    // rad/s al arrastrar hasta el borde
 const START_DISTANCE = 70
-const MAX_DRAG_PX = 140     // arrastre (px) para llegar al giro máximo
+const MAX_DRAG_PX = 140      // arrastre (px) para llegar al giro máximo
+const MIN_DISTANCE = PLANET_RADIUS + 3 // colisión: no atravesar el planeta
+const MAX_DISTANCE = 260     // límite de contención: no alejarse al infinito
+const AUTOPILOT_TURN = 1.5   // rad/s de corrección al pasarse del límite exterior
 
 function Planet3D({ planet }: { planet: PlanetData }) {
   const ref = useRef<THREE.Mesh>(null!)
@@ -29,11 +32,21 @@ function Planet3D({ planet }: { planet: PlanetData }) {
   )
 }
 
-/* ====== COHETE — primera persona: solo se pilotea, no se ve la nave ====== */
-function FlightRig({ steerRef }: { steerRef: React.RefObject<{ x: number; y: number }> }) {
+/* ====== COHETE — primera persona: solo se pilotea, no se ve la nave ======
+   Sistema de colisiones/contención de dos límites:
+   - MIN_DISTANCE: colisión con el planeta — no se puede atravesar la geometría.
+   - MAX_DISTANCE: contención orbital — si el cohete se aleja demasiado, un
+     "autopiloto" toma el control de a poco y lo redirige hacia el planeta
+     hasta volver a estar dentro del límite (en vez de un tope duro o teletransporte,
+     que se sentiría como un choque contra una pared invisible). */
+function FlightRig({ steerRef, onBoundsChange }: {
+  steerRef: React.RefObject<{ x: number; y: number }>
+  onBoundsChange: (outOfBounds: boolean) => void
+}) {
   const { camera } = useThree()
   const yaw = useRef(0)
   const pitch = useRef(0)
+  const wasOutOfBounds = useRef(false)
 
   useEffect(() => {
     camera.position.set(0, 4, START_DISTANCE)
@@ -42,19 +55,30 @@ function FlightRig({ steerRef }: { steerRef: React.RefObject<{ x: number; y: num
   }, [camera])
 
   useFrame((_, delta) => {
-    const steer = steerRef.current
-    yaw.current   += -steer.x * MAX_TURN_RATE * delta
-    pitch.current += -steer.y * MAX_TURN_RATE * delta
-    pitch.current = Math.max(-1.15, Math.min(1.15, pitch.current))
+    const distToCenter = camera.position.length()
+    const outOfBounds = distToCenter > MAX_DISTANCE
+    if (outOfBounds !== wasOutOfBounds.current) { wasOutOfBounds.current = outOfBounds; onBoundsChange(outOfBounds) }
 
-    camera.quaternion.setFromEuler(new THREE.Euler(pitch.current, yaw.current, 0, 'YXZ'))
+    if (outOfBounds) {
+      // Autopiloto: gira suavemente hacia el planeta hasta volver a estar dentro del límite.
+      const toCenter = camera.position.clone().negate().normalize()
+      const desiredQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), toCenter)
+      camera.quaternion.slerp(desiredQuat, Math.min(1, AUTOPILOT_TURN * delta))
+      const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ')
+      yaw.current = e.y; pitch.current = e.x
+    } else {
+      const steer = steerRef.current
+      yaw.current   += -steer.x * MAX_TURN_RATE * delta
+      pitch.current += -steer.y * MAX_TURN_RATE * delta
+      pitch.current = Math.max(-1.15, Math.min(1.15, pitch.current))
+      camera.quaternion.setFromEuler(new THREE.Euler(pitch.current, yaw.current, 0, 'YXZ'))
+    }
 
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
     camera.position.addScaledVector(forward, FLY_SPEED * delta)
 
-    // No atravesar el planeta: si el cohete se acerca demasiado al centro, se lo empuja hacia afuera.
-    const distToCenter = camera.position.length()
-    if (distToCenter < PLANET_RADIUS + 3) camera.position.setLength(PLANET_RADIUS + 3)
+    // Colisión con el planeta: no atravesar la geometría, se empuja hacia afuera.
+    if (camera.position.length() < MIN_DISTANCE) camera.position.setLength(MIN_DISTANCE)
   })
 
   return null
@@ -64,6 +88,7 @@ function FlightRig({ steerRef }: { steerRef: React.RefObject<{ x: number; y: num
 export default function PlanetFlybyView({ planet, onExit }: { planet: PlanetData; onExit: () => void }) {
   const steerRef = useRef({ x: 0, y: 0 })
   const dragRef = useRef({ active: false, startX: 0, startY: 0 })
+  const [outOfBounds, setOutOfBounds] = useState(false)
 
   // Ver el comentario en el commit anterior: la capa activa de DeepNavEngine
   // aplica `transform`, lo que convierte a un `position: fixed` descendiente
@@ -97,7 +122,7 @@ export default function PlanetFlybyView({ planet, onExit }: { planet: PlanetData
         <directionalLight position={[40, 25, 30]} intensity={1.4} color="#fff4dc" />
         <Stars radius={300} depth={80} count={5000} factor={3} saturation={0} fade />
         <Planet3D planet={planet} />
-        <FlightRig steerRef={steerRef} />
+        <FlightRig steerRef={steerRef} onBoundsChange={setOutOfBounds} />
       </Canvas>
 
       {/* Mira central del cohete */}
@@ -105,6 +130,14 @@ export default function PlanetFlybyView({ planet, onExit }: { planet: PlanetData
         <div className="absolute inset-0 rounded-full border border-white/30" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/70" />
       </div>
+
+      {outOfBounds && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 glass-strong rounded-full px-4 py-2 pointer-events-none">
+          <span className="font-display text-[0.55rem] tracking-[2px] text-accent-cyan">
+            LÍMITE DE VUELO — REGRESANDO AL PLANETA
+          </span>
+        </div>
+      )}
 
       <button onClick={onExit}
         className="absolute top-4 left-4 z-20 flex items-center gap-2 glass-strong rounded-full pl-3 pr-4 py-2 text-slate-300 hover:text-white transition-colors">
