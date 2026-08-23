@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, useInView, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import { chapters, constellations, missions, galleryImages, type ConstellationData } from '@/lib/data'
 import { useDeepNav } from '@/components/DeepNavEngine'
@@ -85,6 +86,12 @@ function ZoneLabel({ text }: { text: string }) {
    PUZZLE GAME (unchanged logic)
 ═══════════════════════════════════════════════════════════════════════════ */
 function PuzzleGame({ puzzle, onClose }: { puzzle: any; onClose: () => void }) {
+  const { setOverlayOpen } = useDeepNav()
+  useEffect(() => {
+    setOverlayOpen(true)
+    return () => setOverlayOpen(false)
+  }, [setOverlayOpen])
+
   const [result, setResult] = useState<'none' | 'correct' | 'wrong'>('none')
   const [order, setOrder] = useState<string[]>([])
   const [remaining, setRemaining] = useState<string[]>(() =>
@@ -115,9 +122,24 @@ function PuzzleGame({ puzzle, onClose }: { puzzle: any; onClose: () => void }) {
     (puzzle.type === 'match' && matched.size === puzzle.pairs.length)
   const typeLabel = puzzle.type === 'order' ? 'ORDENAR' : puzzle.type === 'quiz' ? 'PREGUNTA' : puzzle.type === 'truefalse' ? 'V / F' : 'CONECTAR'
 
-  return (
-    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-      <div className="mt-5 float-glass rounded-xl p-5">
+  // Portal a document.body: las secciones viven dentro de un `.deep-layer` de
+  // DeepNavEngine, que siempre tiene `transform` aplicado (incluso scale(1) en
+  // la capa activa) — eso convierte a un `position: fixed` descendiente en algo
+  // "fijo respecto a esa capa" en vez de la ventana real. Mismo fix que ya usa
+  // SystemFlybyView para su overlay a pantalla completa.
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ duration: 0.25, ease: EASE }}
+        className="card-glass-static p-5 sm:p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <span className="font-display text-[0.55rem] tracking-[3px] text-accent-gold">PUZZLE</span>
@@ -130,7 +152,7 @@ function PuzzleGame({ puzzle, onClose }: { puzzle: any; onClose: () => void }) {
         {puzzle.type === 'order' && (
           <>
             <div className="min-h-[44px] border border-dashed border-accent-purple/20 rounded-lg p-3 mb-3 flex flex-wrap gap-2">
-              {order.length === 0 && <span className="text-slate-700 text-xs">Selecciona en orden...</span>}
+              {order.length === 0 && <span className="text-slate-400 text-xs">Selecciona en orden...</span>}
               {order.map((item, i) => (
                 <button key={item} onClick={() => { setRemaining(p => [...p, item]); setOrder(p => p.filter(x => x !== item)); setResult('none') }}
                   className="px-3 py-1.5 rounded-lg bg-accent-purple/15 text-accent-purple text-xs font-display tracking-wider flex items-center gap-1.5 hover:bg-accent-purple/25 transition-colors">
@@ -167,9 +189,9 @@ function PuzzleGame({ puzzle, onClose }: { puzzle: any; onClose: () => void }) {
                 <p className="flex-1 text-slate-300 text-sm">{s.text}</p>
                 <div className="flex gap-2 flex-shrink-0">
                   <button onClick={() => { const n=[...tfAnswers]; n[i]=true; setTfAnswers(n); setResult('none') }}
-                    className={`px-2.5 py-1 rounded-lg text-[0.6rem] font-display tracking-wider transition-all ${tfAnswers[i]===true?'bg-accent-emerald/15 text-accent-emerald border border-accent-emerald/35':'border border-white/8 text-slate-600 hover:text-white'}`}>V</button>
+                    className={`px-2.5 py-1 rounded-lg text-[0.6rem] font-display tracking-wider transition-all ${tfAnswers[i]===true?'bg-accent-emerald/15 text-accent-emerald border border-accent-emerald/35':'border border-white/8 text-slate-400 hover:text-white'}`}>V</button>
                   <button onClick={() => { const n=[...tfAnswers]; n[i]=false; setTfAnswers(n); setResult('none') }}
-                    className={`px-2.5 py-1 rounded-lg text-[0.6rem] font-display tracking-wider transition-all ${tfAnswers[i]===false?'bg-accent-rose/15 text-accent-rose border border-accent-rose/35':'border border-white/8 text-slate-600 hover:text-white'}`}>F</button>
+                    className={`px-2.5 py-1 rounded-lg text-[0.6rem] font-display tracking-wider transition-all ${tfAnswers[i]===false?'bg-accent-rose/15 text-accent-rose border border-accent-rose/35':'border border-white/8 text-slate-400 hover:text-white'}`}>F</button>
                 </div>
               </div>
             ))}
@@ -193,7 +215,7 @@ function PuzzleGame({ puzzle, onClose }: { puzzle: any; onClose: () => void }) {
                 const isM = [...matched.values()].includes(ri)
                 return (
                   <button key={ri} onClick={() => { if (matchLeft!==null&&!isM){const n=new Map(matched);n.set(matchLeft,ri);setMatched(n);setMatchLeft(null);setResult('none')} }}
-                    className={`w-full px-4 py-2.5 rounded-xl text-left text-sm transition-all ${isM?'border border-accent-emerald/30 text-accent-emerald/70':'border border-white/8 text-slate-400 hover:text-white'}`}>
+                    className={`w-full px-4 py-2.5 rounded-xl text-left text-sm font-display tracking-wider transition-all ${isM?'border border-accent-emerald/30 text-accent-emerald/70':'border border-white/8 text-slate-400 hover:text-white'}`}>
                     {puzzle.pairs[ri][1]}
                   </button>
                 )
@@ -208,7 +230,7 @@ function PuzzleGame({ puzzle, onClose }: { puzzle: any; onClose: () => void }) {
             VERIFICAR
           </button>
           <button onClick={reset}
-            className="px-5 py-2 rounded-lg border border-white/8 text-slate-600 text-xs font-display tracking-[2px] hover:text-white transition-colors">
+            className="px-5 py-2 rounded-lg border border-white/8 text-slate-400 text-xs font-display tracking-[2px] hover:text-white transition-colors">
             RESET
           </button>
           <AnimatePresence mode="wait">
@@ -216,8 +238,9 @@ function PuzzleGame({ puzzle, onClose }: { puzzle: any; onClose: () => void }) {
             {result === 'wrong'   && <motion.span key="no" initial={{scale:0.8,opacity:0}} animate={{scale:1,opacity:1}} exit={{opacity:0}} className="text-accent-rose   text-xs font-display tracking-wider">Inténtalo de nuevo</motion.span>}
           </AnimatePresence>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </motion.div>,
+    document.body
   )
 }
 
@@ -714,7 +737,7 @@ export function ConstellationsSection() {
 
   return (
     <section id="constelaciones" className="relative z-[1] pt-40 pb-24">
-      <div className="max-w-[1320px] mx-auto px-6">
+      <div className="max-w-[1400px] mx-auto px-6">
         <FadeUp className="text-center mb-4"><ZoneLabel text="MAPA ESTELAR" /></FadeUp>
         <FadeUp className="text-center" delay={0.1}>
           <h2 className="font-serif text-[clamp(2.6rem,5.5vw,4.5rem)] text-white/75 font-normal italic mb-3">Constelaciones</h2>
@@ -735,7 +758,7 @@ export function ConstellationsSection() {
         </FadeUp>
       </div>
 
-      <FadeUp delay={0.25} className="px-6 max-w-[1320px] mx-auto">
+      <FadeUp delay={0.25} className="px-6 max-w-[1400px] mx-auto">
         <div
           ref={containerRef}
           className="relative overflow-hidden select-none rounded-2xl w-full"
@@ -1105,9 +1128,8 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
   ]
 
   return (
-    <FadeUp delay={0.3} className="max-w-[1320px] mx-auto px-6 mt-14 pb-6">
-      <div className="rounded-2xl overflow-hidden"
-           style={{background:'rgba(8,14,44,0.55)', backdropFilter:'blur(18px)', border:'1px solid rgba(255,255,255,0.05)'}}>
+    <FadeUp delay={0.3} className="max-w-[1400px] mx-auto px-6 mt-14 pb-6">
+      <div className="card-glass-static overflow-hidden">
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-7 py-6"
@@ -1130,33 +1152,26 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
           </button>
         </div>
 
-        {/* Tool buttons */}
-        <div className="flex gap-2 px-7 pt-5 pb-1">
-          {TOOLS.map(t => (
-            <button key={t.k} onClick={() => switchMode(t.k)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-full font-display text-[0.47rem] tracking-[1.5px] border transition-all duration-200 ${
-                mode === t.k
-                  ? 'text-accent-cyan border-accent-cyan/40 bg-accent-cyan/10'
-                  : 'text-slate-600 border-white/[0.07] hover:text-white/55 hover:border-white/20'
-              }`}>
-              <span className="text-[0.8rem]">{t.icon}</span>{t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Drawing canvas */}
-        <div className="mx-7 mt-4 rounded-xl overflow-hidden"
-             style={{background:'rgba(2,4,20,0.75)', border:'1px solid rgba(255,255,255,0.04)'}}>
-          <canvas ref={canvasRef} className="w-full block" style={{height:'300px'}} />
-        </div>
-
-        {/* Name input + save */}
-        <div className="flex gap-3 items-center flex-wrap px-7 py-5">
+        {/* Toolbar: modo de dibujo + nombre, todo en una fila directamente
+            encima del lienzo (antes el nombre quedaba suelto debajo). */}
+        <div className="flex gap-3 items-center flex-wrap px-7 pt-5 pb-4">
+          <div className="flex gap-2 flex-wrap">
+            {TOOLS.map(t => (
+              <button key={t.k} onClick={() => switchMode(t.k)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full font-display text-[0.47rem] tracking-[1.5px] border transition-all duration-200 ${
+                  mode === t.k
+                    ? 'text-accent-cyan border-accent-cyan/40 bg-accent-cyan/10'
+                    : 'text-slate-600 border-white/[0.07] hover:text-white/55 hover:border-white/20'
+                }`}>
+                <span className="text-[0.8rem]">{t.icon}</span>{t.label}
+              </button>
+            ))}
+          </div>
           <input
             type="text" value={name} onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
             placeholder="Nombre de tu constelación..." maxLength={40}
-            className="flex-1 min-w-[160px] px-4 py-2.5 rounded-xl font-display text-[0.72rem] tracking-wide text-white/70 placeholder-white/20 outline-none transition-all"
+            className="flex-1 min-w-[160px] px-4 py-2 rounded-full font-display text-[0.72rem] tracking-wide text-white/70 placeholder-white/20 outline-none transition-all"
             style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)'}}
             onFocus={e => { e.currentTarget.style.borderColor='rgba(34,211,238,0.35)'; e.currentTarget.style.background='rgba(34,211,238,0.04)' }}
             onBlur={e  => { e.currentTarget.style.borderColor='rgba(255,255,255,0.07)'; e.currentTarget.style.background='rgba(255,255,255,0.03)' }}
@@ -1171,6 +1186,12 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
             </span>
           )}
         </div>
+
+        {/* Drawing canvas */}
+        <div className="mx-7 mb-7 rounded-xl overflow-hidden"
+             style={{background:'rgba(2,4,20,0.75)', border:'1px solid rgba(255,255,255,0.04)'}}>
+          <canvas ref={canvasRef} className="w-full block" style={{height:'300px'}} />
+        </div>
       </div>
     </FadeUp>
   )
@@ -1180,11 +1201,9 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
    GALLERY — Floating images in void
 ═══════════════════════════════════════════════════════════════════════════ */
 export function GallerySection() {
-  const spans = [2,1,1,2,1,1,2]
-
   return (
     <section id="galeria" className="relative z-[1] pt-40 pb-24">
-      <div className="max-w-[1320px] mx-auto px-6">
+      <div className="max-w-[1400px] mx-auto px-6">
 
         <FadeUp className="text-center mb-4">
           <ZoneLabel text="FOTOGRAFÍA ESPACIAL" />
@@ -1198,13 +1217,13 @@ export function GallerySection() {
           </p>
         </FadeUp>
 
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 lg:gap-3" style={{ gridAutoRows: '200px' }}>
-            {galleryImages.map((img, i) => {
-              const rowSpan = spans[i % spans.length]
-              return (
+        {/* aspect-ratio uniforme por celda (antes variaba con un patrón tipo
+            masonry) + object-cover en cada imagen para recortar sin deformar. */}
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 lg:gap-3">
+            {galleryImages.map((img, i) => (
                 <ScaleIn key={i} delay={i * 0.05}
-                  className="relative overflow-hidden group cursor-pointer"
-                  style={{ gridRow: `span ${rowSpan}`, borderRadius: '4px' } as React.CSSProperties}>
+                  className="relative overflow-hidden group cursor-pointer aspect-[4/3]"
+                  style={{ borderRadius: '4px' }}>
                   <img src={img.src} alt={img.alt} loading="lazy"
                     className="w-full h-full object-cover transition-all duration-700 ease-out group-hover:scale-105 opacity-70 group-hover:opacity-90" />
                   {/* Reveal on hover */}
@@ -1217,8 +1236,7 @@ export function GallerySection() {
                   <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
                     style={{ boxShadow: 'inset 0 0 0 1px rgba(34,211,238,0.2), inset 0 0 20px rgba(34,211,238,0.03)' }} />
                 </ScaleIn>
-              )
-            })}
+            ))}
           </div>
       </div>
     </section>
@@ -1644,6 +1662,11 @@ function MissionCard({ mission, colorScheme, icon, gameType, gameLabel, chainMsg
   onComplete: () => void
 }) {
   const [gameActive, setGameActive] = useState(false)
+  const { setOverlayOpen } = useDeepNav()
+  useEffect(() => {
+    setOverlayOpen(gameActive)
+    return () => setOverlayOpen(false)
+  }, [gameActive, setOverlayOpen])
 
   const GameComponent = {
     sequence: SequenceGame,
@@ -1679,14 +1702,14 @@ function MissionCard({ mission, colorScheme, icon, gameType, gameLabel, chainMsg
         </div>
         <div className="flex items-center gap-2">
           {completed && <span className={`font-display text-[0.44rem] tracking-[2px] ${colorScheme.text}`}>✓ ACTIVA</span>}
-          {mission.chapter && <span className="text-[0.48rem] font-display tracking-[2px] text-slate-700">CAP.{mission.chapter}</span>}
+          {mission.chapter && <span className="text-[0.48rem] font-display tracking-[2px] text-slate-400">CAP.{mission.chapter}</span>}
         </div>
       </div>
 
       <h3 className="font-display text-[0.95rem] font-bold mb-2 tracking-wide text-white/85 relative z-[1]">{mission.title}</h3>
-      <p className="text-slate-600 text-[0.82rem] leading-relaxed mb-4 flex-1 relative z-[1]">{mission.desc}</p>
+      <p className="text-slate-400 text-[0.82rem] leading-relaxed mb-4 flex-1 relative z-[1]">{mission.desc}</p>
 
-      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-display text-[0.48rem] tracking-[2px] self-start relative z-[1] mb-4 ${mission.active ? 'text-green-400' : 'text-slate-600'}`}
+      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-display text-[0.48rem] tracking-[2px] self-start relative z-[1] mb-4 ${mission.active ? 'text-green-400' : 'text-slate-400'}`}
         style={{ background: mission.active ? 'rgba(74,222,128,0.06)' : 'rgba(100,100,100,0.06)', border: `1px solid ${mission.active ? 'rgba(74,222,128,0.15)' : 'rgba(100,100,100,0.15)'}` }}>
         {mission.active && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />}
         {mission.status}
@@ -1720,7 +1743,7 @@ function MissionCard({ mission, colorScheme, icon, gameType, gameLabel, chainMsg
               style={{ background: colorScheme.glow, border: `1px solid ${colorScheme.border}` }}>
               ✓ SEÑAL TRANSMITIDA
             </div>
-            <p className="font-display text-[0.38rem] tracking-[1.5px] text-slate-600 text-center leading-relaxed">{chainMsg}</p>
+            <p className="font-display text-[0.38rem] tracking-[1.5px] text-slate-400 text-center leading-relaxed">{chainMsg}</p>
           </div>
         )}
       </div>
@@ -1775,7 +1798,7 @@ export function MissionsSection() {
 
         {/* Progress chain indicator */}
         <FadeUp delay={0.18} className="flex items-center justify-center gap-3 mb-12">
-          <span className="font-display text-[0.48rem] tracking-[2px] text-slate-700">SISTEMA DE CONTROL</span>
+          <span className="font-display text-[0.48rem] tracking-[2px] text-slate-400">SISTEMA DE CONTROL</span>
           <div className="flex gap-1.5">
             {missions.map((m, i) => (
               <div key={i} className="w-2 h-2 rounded-full transition-all duration-500"
@@ -1785,7 +1808,7 @@ export function MissionsSection() {
                 }} />
             ))}
           </div>
-          <span className={`font-display text-[0.48rem] tracking-[2px] transition-colors duration-500 ${allDone ? 'text-green-400' : 'text-slate-700'}`}>
+          <span className={`font-display text-[0.48rem] tracking-[2px] transition-colors duration-500 ${allDone ? 'text-green-400' : 'text-slate-400'}`}>
             {completed.length}/{missions.length}
           </span>
         </FadeUp>

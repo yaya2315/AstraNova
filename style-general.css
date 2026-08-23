@@ -97,17 +97,31 @@ body {
     border-bottom: 1px solid rgba(255,255,255,0.06);
   }
 
+  /* Glassmorphism premium — usado en todas las tarjetas/paneles flotantes
+     (excepto el canvas del Sistema Solar, que no lleva este tratamiento). */
   .card-glass {
     @apply rounded-2xl p-7 transition-all duration-500;
-    background: rgba(10, 15, 25, 0.50);
-    backdrop-filter: blur(20px) saturate(1.3);
-    -webkit-backdrop-filter: blur(20px) saturate(1.3);
-    border: 1px solid var(--border);
+    background: rgba(10, 15, 30, 0.55);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(56, 189, 248, 0.05);
   }
   .card-glass:hover {
-    border-color: var(--border-mid);
-    background: rgba(10, 15, 25, 0.65);
-    transform: translateY(-3px);
+    border-color: rgba(56, 189, 248, 0.4);
+    transform: translateY(-6px);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), 0 0 40px rgba(56, 189, 248, 0.12);
+  }
+
+  /* Misma superficie de cristal, sin el micro-lift al hover — para tarjetas
+     de Capa 2 (modales) que no son "clickeables" en sí mismas. */
+  .card-glass-static {
+    @apply rounded-2xl transition-all duration-500;
+    background: rgba(10, 15, 30, 0.55);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(56, 189, 248, 0.05);
   }
 
   /* ─ Text gradients ─ */
@@ -209,7 +223,7 @@ body {
                 box-shadow 0.45s ease,
                 border-color 0.3s ease;
   }
-  .holo-card:hover { transform: translateY(-4px); }
+  .holo-card:hover { transform: translateY(-6px); }
   .holo-scan {
     top: -1px;
     animation: none;
@@ -255,11 +269,15 @@ body {
    El JS escribe data-state; el CSS aplica las tres poses.
 ══════════════════════════════════════════════════════════════════════════════ */
 
-/* Stack: contenedor fijo que aloja todas las capas */
+/* Stack: contenedor fijo que aloja todas las capas.
+   perspective + preserve-3d habilitan translateZ real en las capas hijas —
+   sin esto, translateZ no tendría ningún efecto visual (2D plano). */
 #deep-stack {
   position: fixed;
   inset: 0;
   z-index: 10;
+  perspective: 1200px;
+  transform-style: preserve-3d;
 }
 
 /* ── Transición de entrada desde la pantalla de carga ───────────────────────
@@ -287,7 +305,7 @@ body.ls-pre #premium-bg {
    position:absolute inset:0 → todas ocupan exactamente el mismo espacio.
    overflow-y:auto → scroll interno independiente del documento.
    will-change → pista al compositor GPU para transform + opacity.
-   La "dive curve" arranca lenta, acelera y frena suave (como sumergirse).
+   Curva física fluida (Depth UI): arranca rápido, frena muy suave al llegar.
 ──────────────────────────────────────────────────────────────────────────── */
 .deep-layer {
   position: absolute;
@@ -297,34 +315,43 @@ body.ls-pre #premium-bg {
   transform-origin: center center;
   will-change: transform, opacity;
   transition:
-    transform 0.85s cubic-bezier(.3,0,.15,1),
-    opacity   0.7s ease;
+    transform 0.7s cubic-bezier(0.16,1,0.3,1),
+    opacity   0.7s cubic-bezier(0.16,1,0.3,1),
+    filter    0.4s ease;
 }
 
-/* ── Los tres estados de pose ────────────────────────────────────────────────
+/* ── Los tres estados de pose — profundidad real en el eje Z ─────────────────
 
-   out-back  → esperando en las profundidades: scale(0.4), opacity 0
-   active    → donde está el usuario ahora:    scale(1),   opacity 1
-   out-front → ya atravesada, atrás del user:  scale(2.6), opacity 0
+   out-back  → esperando en las profundidades: translateZ(-200px) scale(0.85), opacity 0
+   active    → donde está el usuario ahora:    translateZ(0)      scale(1),    opacity 1
+   out-front → ya atravesada, viene hacia el usuario y se disuelve:
+               translateZ(100px) scale(1.15), opacity 0
 
    pointer-events:none en estados inactivos previene clics fantasma.
 ────────────────────────────────────────────────────────────────────────── */
 .deep-layer[data-state="out-back"] {
-  transform: scale(0.4);
+  transform: translateZ(-200px) scale(0.85);
   opacity: 0;
   pointer-events: none;
 }
 
 .deep-layer[data-state="active"] {
-  transform: scale(1);
+  transform: translateZ(0) scale(1);
   opacity: 1;
   pointer-events: auto;
 }
 
 .deep-layer[data-state="out-front"] {
-  transform: scale(2.6);
+  transform: translateZ(100px) scale(1.15);
   opacity: 0;
   pointer-events: none;
+}
+
+/* Capa 2 (overlays: puzzle, laboratorio, misión activa) — al abrirse, difumina
+   y oscurece la capa de contenido detrás (Capa 1), aplicado por DeepNavEngine
+   vía setOverlayOpen() sobre la capa activa. */
+.deep-layer.layer-dimmed {
+  filter: blur(20px) brightness(0.6);
 }
 
 /* ── Fondo — respira cuando el usuario profundiza ───────────────────────────

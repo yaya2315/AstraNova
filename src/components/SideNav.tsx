@@ -62,27 +62,32 @@ export default function SideNav() {
               if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.28)'
             }}
           >
-            {/* Active background pill — siempre en el DOM, opacity evita mount/unmount durante transiciones */}
-            <span
-              className="absolute inset-x-2 inset-y-1 rounded-xl pointer-events-none"
-              style={{
-                opacity:    isActive ? 1 : 0,
-                transition: 'opacity 0.25s ease',
-                background: 'rgba(0,240,255,0.07)',
-                border:     '1px solid rgba(0,240,255,0.16)',
-              }}
-            />
-
-            {/* Left glow pip */}
-            <span
-              className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-6 rounded-r-full pointer-events-none"
-              style={{
-                opacity:    isActive ? 1 : 0,
-                transition: 'opacity 0.25s ease',
-                background: '#00F0FF',
-                boxShadow:  '0 0 8px rgba(0,240,255,0.9), 0 0 16px rgba(0,240,255,0.4)',
-              }}
-            />
+            {/* Indicador de profundidad — un solo elemento compartido (layoutId) que
+                se desliza/mofa entre ítems al cambiar de capa, en vez de dos pills
+                estáticos cruzando opacidad. Framer Motion anima la transición de
+                posición automáticamente cuando el layoutId "salta" de botón. */}
+            {isActive && (
+              <motion.span
+                layoutId="depth-indicator-pill"
+                className="absolute inset-x-2 inset-y-1 rounded-xl pointer-events-none"
+                style={{
+                  background: 'rgba(0,240,255,0.07)',
+                  border:     '1px solid rgba(0,240,255,0.16)',
+                }}
+                transition={{ type: 'spring', stiffness: 420, damping: 38 }}
+              />
+            )}
+            {isActive && (
+              <motion.span
+                layoutId="depth-indicator-pip"
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-6 rounded-r-full pointer-events-none"
+                style={{
+                  background: '#00F0FF',
+                  boxShadow:  '0 0 8px rgba(0,240,255,0.9), 0 0 16px rgba(0,240,255,0.4)',
+                }}
+                transition={{ type: 'spring', stiffness: 420, damping: 38 }}
+              />
+            )}
 
             <span className="relative z-[1]">{item.icon}</span>
             <span

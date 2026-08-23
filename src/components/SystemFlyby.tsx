@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Stars } from '@react-three/drei'
 import * as THREE from 'three'
 import { planets, type PlanetData } from '@/lib/data'
-import { Sun, Planet, OrbitPaths, AsteroidBelt, SUN_RADIUS } from './SolarSystem'
+import { Sun, Planet, OrbitPaths, AsteroidBelt, Comets, SUN_RADIUS } from './SolarSystem'
 
 const MAX_TURN_RATE = 1.6     // rad/s al arrastrar hasta el borde
 const MAX_DRAG_PX = 140       // arrastre (px) para llegar al giro máximo
@@ -18,10 +18,137 @@ const START_DISTANCE = 95     // más allá de Neptuno (orbit≈48), vista de co
 const MAX_DISTANCE = 95       // contención: no alejarse más allá del borde del sistema
 const AUTOPILOT_TURN = 1.5    // rad/s de corrección al pasarse del límite exterior
 const COLLISION_BUFFER = 1.5  // margen extra sobre el radio real de cada cuerpo
+const CAMERA_FOV = 50         // lente más cerrado — menos "ojo de pez", da sensación de mayor escala
 
 type BodyEntry = { obj: THREE.Object3D; radius: number; label: string }
 
+/* ====== GALAXIAS — fondo decorativo lejano, sin física ni colisión ======
+   Manchas de luz tipo "sprite" (siempre de cara a la cámara) generadas por
+   canvas, dispersas muy por fuera del sistema. Tonos casi blancos con apenas
+   un matiz de color (como fotos reales de galaxias lejanas) — nada de colores
+   saturados tipo arcoíris, que se leían como luces de navidad. */
+function generateGalaxyTexture(hue: number, squash: number): THREE.CanvasTexture {
+  const size = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const cx = size / 2, cy = size / 2
+
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.scale(1, squash)
+  const core = ctx.createRadialGradient(0, 0, 0, 0, 0, size / 2)
+  core.addColorStop(0, `hsla(${hue}, 22%, 96%, 0.85)`)
+  core.addColorStop(0.2, `hsla(${hue}, 30%, 88%, 0.5)`)
+  core.addColorStop(0.45, `hsla(${hue}, 35%, 70%, 0.2)`)
+  core.addColorStop(0.75, `hsla(${hue}, 40%, 55%, 0.06)`)
+  core.addColorStop(1, 'hsla(0,0%,0%,0)')
+  ctx.fillStyle = core
+  ctx.beginPath()
+  ctx.arc(0, 0, size / 2, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+
+  // banda de polvo tenue — oscurece apenas el plano medio del disco, sin brillo
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.scale(1, squash * 0.4)
+  const dust = ctx.createRadialGradient(0, 0, 0, 0, 0, size / 2)
+  dust.addColorStop(0, 'rgba(0,0,0,0.16)')
+  dust.addColorStop(0.6, 'rgba(0,0,0,0.05)')
+  dust.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = dust
+  ctx.beginPath()
+  ctx.arc(0, 0, size / 2, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+const GALAXY_HUES = [212, 38, 258, 192, 250]
+
+function Galaxies() {
+  const galaxies = useMemo(() => {
+    let seed = 1337
+    const rand = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+    return Array.from({ length: 5 }, (_, i) => {
+      const theta = rand() * Math.PI * 2
+      const phi = Math.acos(2 * rand() - 1)
+      const dist = 260 + rand() * 300
+      const squash = 0.3 + rand() * 0.35
+      return {
+        position: [
+          dist * Math.sin(phi) * Math.cos(theta),
+          dist * Math.cos(phi) * 0.5,
+          dist * Math.sin(phi) * Math.sin(theta),
+        ] as [number, number, number],
+        scale: 40 + rand() * 35,
+        rotation: rand() * Math.PI * 2,
+        texture: generateGalaxyTexture(GALAXY_HUES[i % GALAXY_HUES.length], squash),
+      }
+    })
+  }, [])
+
+  return (
+    <>
+      {galaxies.map((g, i) => (
+        <sprite key={i} position={g.position} scale={[g.scale, g.scale * 0.62, 1]}>
+          <spriteMaterial
+            map={g.texture}
+            transparent
+            opacity={0.8}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            rotation={g.rotation}
+          />
+        </sprite>
+      ))}
+    </>
+  )
+}
+
+/* ====== CABINA (primera persona) — morro del cohete, apenas asoma en el borde
+   inferior del cuadro. Chico y lejano a propósito: da referencia de escala sin
+   tapar la vista, y hace que la nave se sienta pequeña frente a cualquier planeta. */
+function Cockpit() {
+  const groupRef = useRef<THREE.Group>(null!)
+  const { camera } = useThree()
+
+  useFrame(() => {
+    groupRef.current.position.copy(camera.position)
+    groupRef.current.quaternion.copy(camera.quaternion)
+  })
+
+  return (
+    <group ref={groupRef}>
+      <group position={[0, -0.7, -2.8]} rotation={[Math.PI / 2 + 0.18, 0, 0]} scale={0.3}>
+        <mesh>
+          <coneGeometry args={[0.3, 1.3, 16]} />
+          <meshStandardMaterial color="#d4d6da" metalness={0.6} roughness={0.35} />
+        </mesh>
+        <mesh position={[0, -0.35, 0]}>
+          <cylinderGeometry args={[0.3, 0.32, 0.3, 16]} />
+          <meshStandardMaterial color="#8a8f96" metalness={0.5} roughness={0.4} />
+        </mesh>
+        {[0.85, -0.85].map((rot, i) => (
+          <mesh key={i} position={[Math.sin(rot) * 0.32, -0.5, Math.cos(rot) * 0.32]} rotation={[0, -rot, 0]}>
+            <boxGeometry args={[0.04, 0.4, 0.32]} />
+            <meshStandardMaterial color="#a03030" metalness={0.3} roughness={0.5} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  )
+}
+
 /* ====== COHETE — primera persona, con dirección (arrastre) y empuje (botones) ======
+   Fix: el reset de posición inicial usa useLayoutEffect (no useEffect) — si no,
+   el primer cuadro se dibuja con la cámara en su posición por defecto (0,0,5),
+   casi dentro del Sol, y se ve un parpadeo antes de saltar a la posición real.
    Sistema de colisiones real contra CUALQUIER cuerpo del sistema (Sol + 8 planetas,
    todos orbitando en vivo): cada cuadro se busca el cuerpo más cercano en un Map de
    refs compartido y, si la distancia es menor a su radio + margen, se empuja la nave
@@ -42,8 +169,9 @@ function FlightRig({ steerRef, thrustRef, bodyRefs, onBoundsChange, onNearestCha
   const wasOut = useRef(false)
   const lastNearestLabel = useRef<string | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     camera.position.set(0, 24, START_DISTANCE)
+    camera.quaternion.identity()
     yaw.current = 0
     pitch.current = 0
   }, [camera])
@@ -119,12 +247,14 @@ function SystemScene({ bodyRefs }: { bodyRefs: React.RefObject<Map<string, BodyE
       <ambientLight intensity={0.5} color="#334466" />
       <directionalLight position={[-15, 5, -20]} intensity={0.6} color="#6680cc" />
       <Stars radius={220} depth={100} count={4000} factor={3} saturation={0} fade />
+      <Galaxies />
       <Sun />
       {planets.map((p: PlanetData) => (
         <Planet key={p.name} data={p} speedMul={1} onHover={NOOP} onLeave={NOOP} onClick={NOOP} registerRef={registerRef} />
       ))}
       <OrbitPaths />
       <AsteroidBelt />
+      <Comets />
     </>
   )
 }
@@ -133,9 +263,9 @@ function SystemScene({ bodyRefs }: { bodyRefs: React.RefObject<Map<string, BodyE
 export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
   const steerRef = useRef({ x: 0, y: 0 })
   const dragRef = useRef({ active: false, startX: 0, startY: 0 })
-  const thrustRef = useRef(1)
+  const thrustRef = useRef(0)
   const bodyRefs = useRef(new Map<string, BodyEntry>())
-  const [thrustDisplay, setThrustDisplay] = useState(1)
+  const [thrustDisplay, setThrustDisplay] = useState(0)
   const [outOfBounds, setOutOfBounds] = useState(false)
   const [nearest, setNearest] = useState<string | null>(null)
 
@@ -170,11 +300,12 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
       style={{ touchAction: 'none' }}
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onPointerLeave={onUp}
     >
-      <Canvas camera={{ fov: 68 }} dpr={[1, 1.5]}
+      <Canvas camera={{ fov: CAMERA_FOV }} dpr={[1, 1.5]}
         gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1, powerPreference: 'high-performance' }}>
         <SystemScene bodyRefs={bodyRefs} />
         <FlightRig steerRef={steerRef} thrustRef={thrustRef} bodyRefs={bodyRefs}
           onBoundsChange={setOutOfBounds} onNearestChange={setNearest} />
+        <Cockpit />
       </Canvas>
 
       {/* Mira central */}

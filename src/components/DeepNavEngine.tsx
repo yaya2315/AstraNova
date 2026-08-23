@@ -30,6 +30,10 @@ interface DeepNavCtx {
   // Salto directo: acepta cualquier índice.
   // Úsalo para la navegación principal (SideNav, header).
   jumpTo:  (targetIndex: number) => void
+  // Capa 2 (overlays: puzzle, misión activa, etc.) — difumina/oscurece la
+  // capa activa (Capa 1) detrás del overlay. Llamar con `true` al abrir y
+  // `false` al cerrar/desmontar el overlay.
+  setOverlayOpen: (open: boolean) => void
 }
 
 const Ctx = createContext<DeepNavCtx | null>(null)
@@ -71,6 +75,9 @@ export function DeepNavProvider({ children }: { children: React.ReactNode }) {
       const el = layerEls.current[idx]
       if (!el) return
       el.dataset.state = state
+      // Defensivo: si el usuario navega mientras un overlay quedó abierto,
+      // no queremos una capa desenfocada para siempre.
+      el.classList.remove('layer-dimmed')
       if (state === 'active') {
         el.removeAttribute('aria-hidden')
         requestAnimationFrame(() => { el.scrollTop = 0 })
@@ -91,6 +98,11 @@ export function DeepNavProvider({ children }: { children: React.ReactNode }) {
   const breathe = useCallback((into: boolean) => {
     if (reduced.current) return
     bgEl.current?.classList.toggle('breathed-in', into)
+  }, [])
+
+  // Capa 2: difumina/oscurece la capa activa cuando un overlay se abre encima.
+  const setOverlayOpen = useCallback((open: boolean) => {
+    layerEls.current[depthRef.current]?.classList.toggle('layer-dimmed', open)
   }, [])
 
   // ── PROFUNDIZAR (secuencial) ─────────────────────────────────────────────
@@ -185,5 +197,5 @@ export function DeepNavProvider({ children }: { children: React.ReactNode }) {
     }
   }, [dive, surface, jumpTo])
 
-  return <Ctx.Provider value={{ depth, dive, surface, jumpTo }}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={{ depth, dive, surface, jumpTo, setOverlayOpen }}>{children}</Ctx.Provider>
 }

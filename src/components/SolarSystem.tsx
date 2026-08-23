@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useRef, useState, useMemo, useCallback, useEffect, memo } from 'react'
+import { createPortal } from 'react-dom'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Stars, Html } from '@react-three/drei'
 import * as THREE from 'three'
@@ -8,7 +9,7 @@ import { planets, type PlanetData } from '@/lib/data'
 import SystemFlybyView from './SystemFlyby'
 
 const ORBIT_SEGMENTS = 64
-const PLANET_SEGMENTS = 32
+const PLANET_SEGMENTS = 48
 const DETAIL_SEGMENTS = 48
 export const SUN_RADIUS = 2.5
 
@@ -29,6 +30,36 @@ export function loadTexture(url: string): THREE.Texture {
   const tex = _texLoader.load(url)
   tex.colorSpace = THREE.SRGBColorSpace
   _texCache.set(url, tex)
+  return tex
+}
+
+/* ====== CAPA DE NUBES ======
+   Textura procedural (canvas, semilla por nombre de planeta) de manchas suaves
+   semi-transparentes — se monta como una esfera apenas más grande que el planeta
+   y gira a otra velocidad, dando profundidad atmosférica sin descargar texturas
+   nuevas. Solo para planetas con atmósfera densa (no Mercurio ni Marte). */
+const _cloudTexCache = new Map<string, THREE.CanvasTexture>()
+function getCloudTexture(seed: string): THREE.CanvasTexture {
+  const cached = _cloudTexCache.get(seed)
+  if (cached) return cached
+  const w = 512, h = 256
+  const c = document.createElement('canvas'); c.width = w; c.height = h
+  const ctx = c.getContext('2d')!
+  let s = Array.from(seed).reduce((acc, ch) => acc + ch.charCodeAt(0), 7)
+  const rand = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff }
+  for (let i = 0; i < 46; i++) {
+    const x = rand() * w, y = rand() * h
+    const r = 16 + rand() * 50
+    const a = 0.06 + rand() * 0.2
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+    g.addColorStop(0, `rgba(255,255,255,${a})`)
+    g.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, w, h)
+  }
+  const tex = new THREE.CanvasTexture(c)
+  tex.wrapS = THREE.RepeatWrapping
+  _cloudTexCache.set(seed, tex)
   return tex
 }
 
@@ -173,13 +204,16 @@ export const Sun = memo(function Sun() {
 })
 
 /* ====== ÓRBITA ======
-   Elipse real con el Sol en el foco (no en el centro): r(θ) = a(1-e²)/(1+e·cosθ).
-   `data.orbit` sigue jugando el rol de semieje mayor (a) — con e pequeño el radio
-   medio apenas cambia respecto al círculo anterior, pero la excentricidad real de
-   cada planeta ya se nota (Mercurio visiblemente más elíptico que Venus, etc). */
+   Elipse CENTRADA en el Sol (no con el Sol en el foco): r(θ) = a·b / √(b²cos²θ + a²sin²θ),
+   con a = data.orbit (semieje mayor) y b = a√(1-e²) (semieje menor). Mantiene la forma
+   elíptica real de cada planeta (Mercurio se nota más achatado que Venus) pero sin el
+   corrimiento hacia un foco — el anillo dibujado en OrbitPaths queda perfectamente
+   centrado en el Sol, coincidiendo siempre con el camino real del planeta. */
 export function orbitRadiusAt(data: PlanetData, theta: number): number {
   const e = data.eccentricity
-  return (data.orbit * (1 - e * e)) / (1 + e * Math.cos(theta))
+  const a = data.orbit
+  const b = a * Math.sqrt(1 - e * e)
+  return (a * b) / Math.sqrt(b * b * Math.cos(theta) ** 2 + a * a * Math.sin(theta) ** 2)
 }
 
 /* ====== PLANET ====== */
@@ -190,6 +224,7 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
 }) {
   const groupRef = useRef<THREE.Group>(null!)
   const meshRef = useRef<THREE.Mesh>(null!)
+  const cloudRef = useRef<THREE.Mesh>(null!)
   const [hovered, setHovered] = useState(false)
 
   const texture = useMemo(() => loadTexture(data.textureUrl), [data.textureUrl])
@@ -199,6 +234,10 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
   // Hitbox de click más grande que el mesh visible — sin esto, planetas chicos
   // (Mercurio) son casi imposibles de acertar con el mouse/dedo.
   const hitboxGeo = useMemo(() => getSharedSphere(Math.max(data.size * 1.8, 0.55), 12), [data.size])
+  // Nubes: solo planetas con atmósfera densa — Mercurio y Marte se quedan sin ellas.
+  const hasClouds = data.name !== 'Mercurio' && data.name !== 'Marte'
+  const cloudGeo = useMemo(() => hasClouds ? getSharedSphere(data.size * 1.025, PLANET_SEGMENTS) : null, [hasClouds, data.size])
+  const cloudTex = useMemo(() => hasClouds ? getCloudTexture(data.name) : null, [hasClouds, data.name])
 
   // Registra el group en un Map compartido (Scene) para que la cámara pueda
   // "perseguir" la posición real del planeta cuadro a cuadro (ver CameraFlyTo).
@@ -215,6 +254,7 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
     groupRef.current.position.x = Math.cos(theta) * r
     groupRef.current.position.z = Math.sin(theta) * r
     meshRef.current.rotation.y += 0.005 * speedMul
+    if (cloudRef.current) cloudRef.current.rotation.y += 0.011 * speedMul
   })
 
   const handleOver = useCallback((e: any) => {
@@ -242,6 +282,11 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
           emissiveIntensity={hovered ? 0.25 : 0.08}
         />
       </mesh>
+      {hasClouds && cloudGeo && cloudTex && (
+        <mesh ref={cloudRef} geometry={cloudGeo}>
+          <meshStandardMaterial map={cloudTex} transparent opacity={0.5} depthWrite={false} roughness={1} />
+        </mesh>
+      )}
       {/* Inner rim — sharp edge light */}
       <mesh geometry={rimGeo} scale={hovered ? 1.22 : 1.1}>
         <meshBasicMaterial color={data.color} transparent opacity={hovered ? 0.35 : 0.15} side={THREE.BackSide} />
@@ -346,9 +391,11 @@ function Moon({ moon, speedMul }: { moon: { size: number; orbit: number; speed: 
   )
 }
 
-/* ====== ORBIT PATHS (single instanced draw) ====== */
+/* ====== ORBIT PATHS (single instanced draw) ======
+   Un solo tono, sutil — como en una lámina de referencia clásica del sistema
+   solar: se nota la forma de cada órbita, sin que el color compita con los
+   planetas ni con el fondo. */
 export const OrbitPaths = memo(function OrbitPaths() {
-  const ref = useRef<THREE.LineSegments>(null!)
   const geo = useMemo(() => {
     const allVerts: number[] = []
     for (const p of planets) {
@@ -366,8 +413,8 @@ export const OrbitPaths = memo(function OrbitPaths() {
   }, [])
 
   return (
-    <lineSegments ref={ref} geometry={geo}>
-      <lineBasicMaterial color="#8B5CF6" transparent opacity={0.18} />
+    <lineSegments geometry={geo}>
+      <lineBasicMaterial color="#9db4d1" transparent opacity={0.25} />
     </lineSegments>
   )
 })
@@ -390,6 +437,80 @@ export const AsteroidBelt = memo(function AsteroidBelt() {
       <pointsMaterial color="#8B8BAA" size={0.06} transparent opacity={0.4} sizeAttenuation />
     </points>
   )
+})
+
+/* ====== COMETAS ======
+   Órbitas muy excéntricas (elipse centrada, mismo principio que orbitRadiusAt
+   pero con e alto) inclinadas respecto al plano de la eclíptica — se acercan
+   rápido al Sol y se alejan despacio, como un cometa real (velocidad angular
+   ∝ 1/r en vez de constante). Cada uno arrastra una cola de puntos que se
+   desvanecen, muestreando su propio historial de posiciones recientes. */
+function makeGlowTexture(r: number, g: number, b: number): THREE.CanvasTexture {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64
+  const ctx = c.getContext('2d')!
+  const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
+  grad.addColorStop(0, `rgba(${r},${g},${b},1)`)
+  grad.addColorStop(0.4, `rgba(${r},${g},${b},0.5)`)
+  grad.addColorStop(1, `rgba(${r},${g},${b},0)`)
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, 64, 64)
+  return new THREE.CanvasTexture(c)
+}
+
+type CometDef = { a: number; e: number; speed: number; tilt: number; offset: number; rgb: [number, number, number] }
+const COMET_DEFS: CometDef[] = [
+  { a: 34, e: 0.90, speed: 5.5, tilt: 0.35, offset: 0.0, rgb: [200, 230, 255] },
+  { a: 42, e: 0.86, speed: 6.5, tilt: -0.5, offset: 2.4, rgb: [220, 245, 255] },
+  { a: 26, e: 0.93, speed: 4.2, tilt: 0.6, offset: 4.6, rgb: [235, 250, 255] },
+]
+const COMET_TAIL_LEN = 9
+
+function Comet({ def }: { def: CometDef }) {
+  const coreRef = useRef<THREE.Sprite>(null!)
+  const tailRefs = useRef<(THREE.Sprite | null)[]>([])
+  const theta = useRef(def.offset)
+  const history = useRef(Array.from({ length: COMET_TAIL_LEN }, () => new THREE.Vector3()))
+  const b = useMemo(() => def.a * Math.sqrt(1 - def.e * def.e), [def.a, def.e])
+
+  const coreTex = useMemo(() => makeGlowTexture(255, 255, 255), [])
+  const tailTex = useMemo(() => makeGlowTexture(...def.rgb), [def.rgb])
+
+  useFrame((_, delta) => {
+    const t = theta.current
+    const r = (def.a * b) / Math.sqrt(b * b * Math.cos(t) ** 2 + def.a * def.a * Math.sin(t) ** 2)
+    theta.current += (def.speed / r) * delta
+
+    // Órbita plana (x', z') inclinada un ángulo fijo respecto a la eclíptica.
+    const xFlat = Math.cos(t) * r
+    const zFlat = Math.sin(t) * r
+    const x = xFlat
+    const y = zFlat * Math.sin(def.tilt)
+    const z = zFlat * Math.cos(def.tilt)
+
+    coreRef.current.position.set(x, y, z)
+    for (let i = history.current.length - 1; i > 0; i--) history.current[i].copy(history.current[i - 1])
+    history.current[0].set(x, y, z)
+    tailRefs.current.forEach((s, i) => { if (s) s.position.copy(history.current[i]) })
+  })
+
+  return (
+    <>
+      <sprite ref={coreRef} scale={[0.45, 0.45, 1]}>
+        <spriteMaterial map={coreTex} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
+      </sprite>
+      {Array.from({ length: COMET_TAIL_LEN }).map((_, i) => {
+        const f = 1 - i / COMET_TAIL_LEN
+        return (
+          <sprite key={i} ref={(el) => { tailRefs.current[i] = el }} scale={[0.4 * f, 0.4 * f, 1]}>
+            <spriteMaterial map={tailTex} transparent opacity={0.5 * f} depthWrite={false} blending={THREE.AdditiveBlending} />
+          </sprite>
+        )
+      })}
+    </>
+  )
+}
+
+export const Comets = memo(function Comets() {
+  return <>{COMET_DEFS.map((def, i) => <Comet key={i} def={def} />)}</>
 })
 
 /* ====== TRANSICIÓN DE CÁMARA — "volar" hacia el planeta clickeado ======
@@ -462,6 +583,7 @@ function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick, flyTarge
       ))}
       <OrbitPaths />
       <AsteroidBelt />
+      <Comets />
       <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.06} enableZoom={false}
         enablePan={false} maxPolarAngle={Math.PI * 0.48} minPolarAngle={Math.PI * 0.1} />
       <CameraFlyTo controlsRef={controlsRef} planetRefs={planetRefs} flyTarget={flyTarget} />
@@ -494,7 +616,7 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
         </button>
 
         <div className="flex flex-col lg:flex-row gap-8 items-start">
-          <div className="w-full lg:w-[320px] h-[320px] rounded-2xl overflow-hidden flex-shrink-0 bg-space-900/50 border border-white/5">
+          <div className="w-full lg:w-[320px] aspect-square rounded-2xl overflow-hidden flex-shrink-0 bg-space-900/50 border border-white/5">
             <Canvas camera={{ position: [0, 0, 4], fov: 45 }} dpr={[1, 1.5]}
               gl={{ antialias: false, alpha: true, toneMapping: THREE.ACESFilmicToneMapping }}>
               <ambientLight intensity={0.4} color="#334466" />
@@ -514,11 +636,11 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
             </h3>
             <p className="text-slate-400 leading-relaxed mb-6 text-[0.95rem]">{planet.longDesc}</p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {planet.stats.map((s) => (
                 <div key={s.label} className="p-3 bg-white/[0.03] rounded-xl border border-white/5">
                   <div className="font-display text-sm font-bold text-white">{s.value}</div>
-                  <div className="text-[0.65rem] text-slate-500 mt-0.5">{s.label}</div>
+                  <div className="text-[0.65rem] text-slate-400 mt-0.5">{s.label}</div>
                 </div>
               ))}
             </div>
@@ -568,37 +690,22 @@ export default function SolarSystem() {
   const [flyTarget, setFlyTarget] = useState<string | null>(null)
   const flyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const toggleImmersive = useCallback(() => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen().then(() => setImmersive(true)).catch(() => {})
-    } else {
-      document.exitFullscreen().then(() => setImmersive(false)).catch(() => {})
-    }
-  }, [])
-
-  useEffect(() => {
-    const onFs = () => { if (!document.fullscreenElement) setImmersive(false) }
-    document.addEventListener('fullscreenchange', onFs)
-    return () => document.removeEventListener('fullscreenchange', onFs)
-  }, [])
+  // No usa la Fullscreen API del navegador (`requestFullscreen`): falla en
+  // silencio dentro de iframes sin permiso, en Safari de iOS, o detrás de
+  // políticas de features restringidas — el botón "quedaba sin hacer nada".
+  // En cambio, arma el mismo overlay a pantalla completa vía CSS + portal a
+  // document.body que ya usa SystemFlybyView, así siempre funciona.
+  const toggleImmersive = useCallback(() => setImmersive(v => !v), [])
 
   useEffect(() => () => { if (flyTimeoutRef.current) clearTimeout(flyTimeoutRef.current) }, [])
 
-  const navigate = useCallback((dir: number) => {
-    if (!selected) return
-    const idx = planets.findIndex(p => p.name === selected.name)
-    const next = planets[(idx + dir + planets.length) % planets.length]
-    setSelected(next)
-    setFlyTarget(next.name) // la cámara de fondo re-encuadra sin retraso — el panel ya está abierto
-    setFlying(false)
-  }, [selected])
-
-  const handleHover = useCallback((d: PlanetData) => setHovered(d), [])
-  const handleLeave = useCallback(() => setHovered(null), [])
-
-  // Click desde la vista orbital: primero "vuela" la cámara hacia el planeta y,
-  // recién al llegar (ARRIVAL_MS, sincronizado con FLY_LAMBDA), abre el panel de
-  // info — evita que el panel tape la transición que se supone hay que ver.
+  // Click desde la vista orbital, o Prev/Next dentro del panel: primero "vuela"
+  // la cámara hacia el planeta y, recién al llegar (ARRIVAL_MS, sincronizado con
+  // FLY_LAMBDA), actualiza el panel de info — si no, el contenido cambia antes
+  // de que la cámara termine de moverse. Prev/Next parte de `flyTarget` (el
+  // destino actual, no lo que el panel todavía está mostrando) para que clicks
+  // rápidos y consecutivos sigan avanzando planeta por planeta en vez de quedar
+  // pegados en el mismo vecino.
   const ARRIVAL_MS = 900
   const handleClick = useCallback((d: PlanetData) => {
     setFlyTarget(d.name)
@@ -606,14 +713,30 @@ export default function SolarSystem() {
     flyTimeoutRef.current = setTimeout(() => { setSelected(d); flyTimeoutRef.current = null }, ARRIVAL_MS)
   }, [])
 
+  const navigate = useCallback((dir: number) => {
+    const fromName = flyTarget ?? selected?.name
+    if (!fromName) return
+    const idx = planets.findIndex(p => p.name === fromName)
+    const next = planets[(idx + dir + planets.length) % planets.length]
+    setFlyTarget(next.name)
+    if (flyTimeoutRef.current) clearTimeout(flyTimeoutRef.current)
+    flyTimeoutRef.current = setTimeout(() => { setSelected(next); flyTimeoutRef.current = null }, ARRIVAL_MS)
+  }, [flyTarget, selected])
+
+  const handleHover = useCallback((d: PlanetData) => setHovered(d), [])
+  const handleLeave = useCallback(() => setHovered(null), [])
+
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     mouseRef.current.x = e.clientX
     mouseRef.current.y = e.clientY
     forceTooltip(c => c + 1)
   }, [])
 
-  return (
-    <div ref={containerRef} className={`relative w-full rounded-2xl overflow-hidden border border-white/[0.04] bg-space-950 ${immersive ? 'h-screen' : 'h-[440px] sm:h-[560px] md:h-[680px] lg:h-[800px]'}`}>
+  const view = (
+    <div ref={containerRef} className={immersive
+      ? 'fixed inset-0 z-[1000] w-screen h-screen bg-space-950 overflow-hidden'
+      : 'relative w-full rounded-2xl overflow-hidden border border-white/[0.04] bg-space-950 h-[440px] sm:h-[560px] md:h-[680px] lg:h-[800px]'
+    }>
 
       {/* Immersive button — top left. Sin etiqueta de texto en pantallas angostas
           (icono solo) para no chocar con el control de velocidad de la derecha. */}
@@ -704,4 +827,6 @@ export default function SolarSystem() {
       </div>
     </div>
   )
+
+  return immersive ? createPortal(view, document.body) : view
 }
