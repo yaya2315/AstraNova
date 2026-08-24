@@ -355,7 +355,15 @@ export function crearMision(contenedor, opciones) {
 
   function montarModoAccesible() {
     fichasEl = raiz.querySelector('.ems-fichas')
-    dibujarFichasAccesibles()
+    // El corte de hielo (zona-derecha) es común a ambos modos, pero solo
+    // montarModoEstandar() lo inicializaba — sin esto, cuadro() crashea acá
+    // apenas entra a la fase 'entre-rondas' con canvasHielo aún undefined.
+    canvasHielo = raiz.querySelector('.ems-hielo')
+    redimensionarCanvas(canvasHielo)
+    ctxHielo = canvasHielo.getContext('2d')
+    // El primer dibujado real lo hace iniciarRonda() (llamada justo después,
+    // desde iniciar()), una vez que existe `ordenActual` — dibujar acá antes
+    // de esa ronda inicial rompe con "ordenActual is undefined".
     raiz.querySelector('[data-accion="verificar-orden"]').addEventListener('click', verificarOrdenAccesible)
   }
 

@@ -243,7 +243,10 @@ export async function abrirMision(id, opciones = {}) {
   function mostrarDebriefing(exito, metricas) {
     mostrarFase('debriefing')
     const estrellas = exito ? Math.max(0, Math.min(3, metricas?.estrellas ?? 0)) : 0
-    if (exito) guardarMejoresEstrellas(id, estrellas)
+    if (exito) {
+      guardarMejoresEstrellas(id, estrellas)
+      opciones.onSuperada?.({ ...metricas, estrellas })
+    }
 
     fondo.querySelector('.mision-estrellas').textContent =
       '★'.repeat(estrellas) + '☆'.repeat(3 - estrellas)

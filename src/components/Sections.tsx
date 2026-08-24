@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { motion, useInView, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import { chapters, constellations, missions, galleryImages, type ConstellationData } from '@/lib/data'
 import { useDeepNav } from '@/components/DeepNavEngine'
+import { abrirMisionDelMotor } from '@/lib/motorMisionesBridge'
 
 // ─── Animation ───────────────────────────────────────────────────────────────
 
@@ -1286,6 +1287,14 @@ const MISSION_DOT_COLORS: Record<string, string> = {
   rose: '#f472b6', emerald: '#34d399', indigo: '#818cf8',
 }
 
+// Índice de misión (en `missions`, src/lib/data.ts) → id del motor nuevo
+// (public/misiones). Se amplía a medida que se migran más juegos; el resto
+// sigue con el placeholder inline de abajo hasta que estén listos.
+const MOTOR_MISION_IDS: Record<number, string> = {
+  0: 'europa', // Europa Clipper
+  3: 'webb',   // James Webb
+}
+
 /* ─── Game 1: Secuencia de Señales (Europa Clipper) ───────────────────────── */
 function SequenceGame({ color, onComplete }: { color: MissionColorScheme; onComplete: () => void }) {
   const BTNS = ['#22d3ee', '#a78bfa', '#c9a84c', '#f472b6']
@@ -1664,7 +1673,7 @@ function CodeGame({ color, onComplete }: { color: MissionColorScheme; onComplete
 }
 
 /* ─── Mission card (wraps info + active game) ─────────────────────────────── */
-function MissionCard({ mission, colorScheme, icon, gameType, gameLabel, chainMsg, completed, onComplete }: {
+function MissionCard({ mission, colorScheme, icon, gameType, gameLabel, chainMsg, completed, onComplete, motorMisionId }: {
   mission: typeof missions[0]
   colorScheme: MissionColorScheme
   icon: React.ReactNode
@@ -1673,13 +1682,24 @@ function MissionCard({ mission, colorScheme, icon, gameType, gameLabel, chainMsg
   chainMsg: string
   completed: boolean
   onComplete: () => void
+  // Si está presente, ACTIVAR abre el minijuego a pantalla completa del
+  // motor nuevo (public/misiones) en vez del placeholder inline de abajo.
+  motorMisionId?: string
 }) {
   const [gameActive, setGameActive] = useState(false)
-  const { setOverlayOpen } = useDeepNav()
-  useEffect(() => {
-    setOverlayOpen(gameActive)
-    return () => setOverlayOpen(false)
-  }, [gameActive, setOverlayOpen])
+  // Nota: NO se difumina la capa activa acá (a diferencia de PuzzleGame, que
+  // sí lo hace porque se renderiza en un portal aparte, ENCIMA del blur). El
+  // placeholder de esta tarjeta se dibuja inline, dentro de la misma capa
+  // que se difuminaría — llamar a setOverlayOpen acá dejaba el propio juego
+  // ilegible detrás de su blur en cuanto se activaba.
+
+  const handleActivar = () => {
+    if (motorMisionId) {
+      abrirMisionDelMotor(motorMisionId, { onSuperada: () => onComplete() })
+    } else {
+      setGameActive(true)
+    }
+  }
 
   const GameComponent = {
     sequence: SequenceGame,
@@ -1733,14 +1753,14 @@ function MissionCard({ mission, colorScheme, icon, gameType, gameLabel, chainMsg
         style={{ borderTop: `1px solid ${colorScheme.border}`, paddingTop: '14px', marginTop: '2px' }}>
 
         {!completed && !gameActive && (
-          <button onClick={() => setGameActive(true)}
+          <button onClick={handleActivar}
             className={`w-full py-2.5 rounded-xl font-display text-[0.44rem] tracking-[2px] ${colorScheme.text} transition-all duration-200 hover:opacity-90`}
             style={{ background: colorScheme.glow, border: `1px solid ${colorScheme.border}` }}>
             ACTIVAR — {gameLabel}
           </button>
         )}
 
-        {gameActive && !completed && (
+        {gameActive && !completed && !motorMisionId && (
           <div>
             <div className="flex items-center justify-between mb-3">
               <span className={`font-display text-[0.42rem] tracking-[2.5px] ${colorScheme.text}`}>INTERFAZ ACTIVA</span>
@@ -1856,6 +1876,7 @@ export function MissionsSection() {
                   chainMsg={CHAIN_MSGS[i]}
                   completed={completed.includes(i)}
                   onComplete={() => handleComplete(i)}
+                  motorMisionId={MOTOR_MISION_IDS[i]}
                 />
               </ScaleIn>
             )
