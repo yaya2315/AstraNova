@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Prueba — motor de misiones (Fase 1)</title>
+<link rel="stylesheet" href="/misiones/estilos-misiones.css" />
+<style>
+  body { background:#0a0a12; color:#fff; font-family: system-ui, sans-serif; padding: 2rem; }
+  button { min-height:44px; padding: .75rem 1.5rem; border-radius: .5rem; border:1px solid #5FD9C4; background:transparent; color:#5FD9C4; cursor:pointer; font-size:1rem; }
+  #estado { margin-top: 1rem; font-family: monospace; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h1>Arnés de prueba — motor de misiones</h1>
+  <p>Página temporal, solo para validar el motor y los juegos antes de la integración final.</p>
+  <button id="abrir">Abrir misión de prueba</button>
+  <button id="abrir-europa">Abrir Europa Clipper</button>
+  <button id="abrir-europa-accesible">Abrir Europa Clipper (modo accesible)</button>
+  <div id="estado"></div>
+
+  <script type="module">
+    import { registrarMision, abrirMision, _misionActivaId } from '/misiones/motor-misiones.js'
+    import { _estadoInterno } from '/misiones/nucleo/bucle-animacion.js'
+
+    registrarMision('prueba', () => import('/misiones/juegos/_prueba.js'))
+    registrarMision('europa', () => import('/misiones/juegos/mision-europa-senales.js'))
+
+    document.getElementById('abrir').addEventListener('click', () => {
+      abrirMision('prueba')
+    })
+    document.getElementById('abrir-europa').addEventListener('click', () => {
+      abrirMision('europa', { dificultad: 1, modoAccesible: false, semilla: 42 })
+    })
+    document.getElementById('abrir-europa-accesible').addEventListener('click', () => {
+      abrirMision('europa', { dificultad: 2, modoAccesible: true, semilla: 42 })
+    })
+
+    const estado = document.getElementById('estado')
+    setInterval(() => {
+      estado.textContent =
+        `misión activa: ${_misionActivaId()}\n` +
+        `bucle: ${JSON.stringify(_estadoInterno())}`
+    }, 500)
+  </script>
+</body>
+</html>

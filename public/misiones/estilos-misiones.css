@@ -1,0 +1,269 @@
+/* estilos-misiones.css
+   Tokens del sistema de misiones + layout del modal. Cada minijuego añade
+   sus propios estilos dentro de .mision-contenedor-juego; este archivo solo
+   define el "casco" del motor: fondo, modal, cabecera, fases, botones. */
+
+:root {
+  --mision-europa: #5FD9C4;
+  --mision-parker: #FFB865;
+  --mision-dragonfly: #C9A227;
+  --mision-webb: #9B7FE8;
+  --mision-lisa: #7FD1FF;
+  --mision-voyager: #FF8FA3;
+
+  --estado-acierto: #5FD9C4;
+  --estado-riesgo: #FFB865;
+  --estado-fallo: #FF8FA3;
+
+  --e-1: .25rem;
+  --e-2: .5rem;
+  --e-3: .75rem;
+  --e-4: 1rem;
+  --e-6: 1.5rem;
+  --e-8: 2rem;
+  --e-12: 3rem;
+  --e-16: 4rem;
+
+  --hud-dato: clamp(1.5rem, 1.1rem + 2vw, 2.5rem);
+  --hud-label: clamp(.625rem, .58rem + .2vw, .75rem);
+}
+
+/* ── Fondo / overlay ──────────────────────────────────────────────────── */
+.mision-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--e-4);
+  background: rgba(6, 4, 12, .82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  /* El acento de cada misión se fija acá vía JS (motor-misiones.js) y lo
+     heredan todos los elementos hijos que lo usan (borde, focos, HUD). */
+  --acento-mision: #5FD9C4;
+  animation: mision-aparecer .25s ease both;
+}
+
+@keyframes mision-aparecer {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+body.mision-abierta {
+  overflow: hidden;
+}
+
+/* ── Modal ────────────────────────────────────────────────────────────── */
+.mision-modal {
+  width: min(920px, 100%);
+  max-height: min(760px, 100dvh - var(--e-8));
+  display: flex;
+  flex-direction: column;
+  background: rgba(16, 12, 24, .96);
+  border: 1px solid color-mix(in srgb, var(--acento-mision) 35%, transparent);
+  border-radius: var(--e-4);
+  box-shadow:
+    0 40px 100px rgba(0, 0, 0, .6),
+    0 0 60px color-mix(in srgb, var(--acento-mision) 12%, transparent);
+  outline: none;
+  overflow: hidden;
+}
+
+.mision-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  padding: var(--e-4) var(--e-6);
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  flex-wrap: wrap;
+}
+
+.mision-titulo {
+  font-size: var(--hud-label);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--acento-mision);
+  margin: 0;
+}
+
+.mision-controles-header {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  flex-wrap: wrap;
+}
+
+.mision-selector-dificultad {
+  display: flex;
+  gap: var(--e-1);
+}
+.mision-selector-dificultad button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--e-1) var(--e-2);
+  border-radius: var(--e-2);
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: transparent;
+  color: rgba(255, 255, 255, .55);
+  font-size: var(--hud-label);
+  cursor: pointer;
+}
+.mision-selector-dificultad button.activo {
+  border-color: var(--acento-mision);
+  color: var(--acento-mision);
+  background: color-mix(in srgb, var(--acento-mision) 12%, transparent);
+}
+
+.mision-toggle-accesible {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  font-size: var(--hud-label);
+  color: rgba(255, 255, 255, .6);
+  cursor: pointer;
+  min-height: 44px;
+}
+.mision-toggle-accesible input {
+  width: 20px;
+  height: 20px;
+}
+
+.mision-boton-icono,
+.mision-cerrar {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .1);
+  background: rgba(255, 255, 255, .04);
+  color: rgba(255, 255, 255, .7);
+  cursor: pointer;
+  font-size: 1rem;
+}
+.mision-boton-icono:focus-visible,
+.mision-cerrar:focus-visible,
+.mision-selector-dificultad button:focus-visible,
+.mision-boton-primario:focus-visible,
+.mision-boton-secundario:focus-visible {
+  outline: 2px solid var(--acento-mision);
+  outline-offset: 2px;
+}
+
+/* ── Cuerpo / fases ───────────────────────────────────────────────────── */
+.mision-cuerpo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mision-fase {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-4);
+  padding: var(--e-8) var(--e-6);
+  text-align: center;
+  overflow-y: auto;
+}
+/* Un author-rule con la misma especificidad que [hidden] le gana a la regla
+   nativa del navegador ([hidden]{display:none}) — sin esto, las tres fases
+   (briefing/juego/debriefing) se dibujan superpuestas todo el tiempo. */
+.mision-fase[hidden] {
+  display: none;
+}
+
+.mision-fase-juego {
+  padding: var(--e-4);
+  align-items: stretch;
+}
+.mision-contenedor-juego {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.mision-briefing-objetivo {
+  font-size: var(--hud-dato);
+  font-weight: 600;
+  color: #fff;
+  max-width: 42ch;
+  margin: 0;
+}
+.mision-briefing-dato {
+  font-size: var(--hud-label);
+  color: rgba(255, 255, 255, .55);
+  max-width: 52ch;
+  margin: 0;
+}
+
+.mision-estrellas {
+  font-size: clamp(2rem, 1.6rem + 2vw, 3rem);
+  color: var(--acento-mision);
+  letter-spacing: .25em;
+}
+.mision-debriefing-estado {
+  font-size: var(--hud-label);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .8);
+  margin: 0;
+}
+.mision-debriefing-dato {
+  font-size: var(--hud-label);
+  color: rgba(255, 255, 255, .55);
+  max-width: 52ch;
+  margin: 0;
+}
+.mision-debriefing-acciones {
+  display: flex;
+  gap: var(--e-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.mision-boton-primario,
+.mision-boton-secundario {
+  min-height: 44px;
+  padding: var(--e-3) var(--e-6);
+  border-radius: var(--e-2);
+  font-size: var(--hud-label);
+  letter-spacing: .08em;
+  cursor: pointer;
+}
+.mision-boton-primario {
+  border: 1px solid var(--acento-mision);
+  background: color-mix(in srgb, var(--acento-mision) 16%, transparent);
+  color: #fff;
+}
+.mision-boton-secundario {
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: transparent;
+  color: rgba(255, 255, 255, .6);
+}
+
+/* ── Accesibilidad ────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .mision-fondo {
+    animation: none;
+  }
+}
+
+/* ── Mobile first — la cabecera se apila en pantallas angostas ────────── */
+@media (max-width: 560px) {
+  .mision-cabecera {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .mision-controles-header {
+    justify-content: space-between;
+  }
+}
