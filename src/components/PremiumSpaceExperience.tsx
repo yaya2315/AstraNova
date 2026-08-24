@@ -39,7 +39,7 @@ export default function PremiumSpaceExperience() {
     <div
       id="premium-bg"
       className="fixed inset-0 z-0 overflow-hidden"
-      style={{ background: '#04060a' }}
+      style={{ background: '#020617' }}
     >
       {/* Layer 0 — Aurora WebGL shader, con parallax 3D sutil (±8px) guiado por el cursor */}
       <div

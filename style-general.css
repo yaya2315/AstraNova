@@ -44,7 +44,7 @@ html {
 
 body {
   font-family: 'Inter', sans-serif;
-  background: #000000;
+  background: #020617;
   color: #F8FAFC;
   overflow-x: hidden;
   line-height: 1.7;
@@ -101,27 +101,27 @@ body {
      (excepto el canvas del Sistema Solar, que no lleva este tratamiento). */
   .card-glass {
     @apply rounded-2xl p-7 transition-all duration-500;
-    background: rgba(10, 15, 30, 0.55);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
+    background: rgba(12, 18, 34, 0.75);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(56, 189, 248, 0.05);
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.8), 0 0 30px rgba(124, 58, 237, 0.12), 0 0 20px rgba(6, 182, 212, 0.10);
   }
   .card-glass:hover {
-    border-color: rgba(56, 189, 248, 0.4);
+    border-color: rgba(6, 182, 212, 0.4);
     transform: translateY(-6px);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), 0 0 40px rgba(56, 189, 248, 0.12);
+    box-shadow: 0 36px 80px rgba(0, 0, 0, 0.85), 0 0 40px rgba(124, 58, 237, 0.18), 0 0 28px rgba(6, 182, 212, 0.16);
   }
 
   /* Misma superficie de cristal, sin el micro-lift al hover — para tarjetas
      de Capa 2 (modales) que no son "clickeables" en sí mismas. */
   .card-glass-static {
     @apply rounded-2xl transition-all duration-500;
-    background: rgba(10, 15, 30, 0.55);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
+    background: rgba(12, 18, 34, 0.75);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(56, 189, 248, 0.05);
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.8), 0 0 30px rgba(124, 58, 237, 0.12), 0 0 20px rgba(6, 182, 212, 0.10);
   }
 
   /* ─ Text gradients ─ */
@@ -264,20 +264,27 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   DEEP NAVIGATION ENGINE
-   Solo se animan transform (scale) y opacity. Nada más.
-   El JS escribe data-state; el CSS aplica las tres poses.
+   DEEP NAVIGATION ENGINE — mazo de capas apiladas en 3D
+   El transform/opacity/filter de cada capa ahora los anima DeepNavEngine.tsx
+   vía framer-motion (spring físico real, stiffness/damping), no CSS — por eso
+   .deep-layer ya no lleva `transition` para esas propiedades: si CSS también
+   intentara interpolarlas chocaría con los valores que escribe JS cuadro a
+   cuadro. El CSS acá solo pone la geometría base (position/inset/overflow) y
+   el `perspective` que hace que translateZ tenga efecto visual.
 ══════════════════════════════════════════════════════════════════════════════ */
 
 /* Stack: contenedor fijo que aloja todas las capas.
    perspective + preserve-3d habilitan translateZ real en las capas hijas —
-   sin esto, translateZ no tendría ningún efecto visual (2D plano). */
+   sin esto, translateZ no tendría ningún efecto visual (2D plano). También
+   recibe el tilt de mouse-parallax (±5°, ver DeepNavEngine.tsx) — de ahí el
+   `transition` acá: solo suaviza ESE movimiento, nada más lo toca. */
 #deep-stack {
   position: fixed;
   inset: 0;
   z-index: 10;
-  perspective: 1200px;
+  perspective: 1800px;
   transform-style: preserve-3d;
+  transition: transform 0.3s ease-out;
 }
 
 /* ── Transición de entrada desde la pantalla de carga ───────────────────────
@@ -304,54 +311,19 @@ body.ls-pre #premium-bg {
 /* Base de cada capa ────────────────────────────────────────────────────────
    position:absolute inset:0 → todas ocupan exactamente el mismo espacio.
    overflow-y:auto → scroll interno independiente del documento.
-   will-change → pista al compositor GPU para transform + opacity.
-   Curva física fluida (Depth UI): arranca rápido, frena muy suave al llegar.
-──────────────────────────────────────────────────────────────────────────── */
+   will-change → pista al compositor GPU (transform/opacity/filter los anima
+   JS, ver DeepNavEngine.tsx — bucket "active"/"peek-1"/"peek-2"/"hidden" según
+   distancia a la capa activa, con spring físico real en vez de cubic-bezier). */
 .deep-layer {
   position: absolute;
   inset: 0;
   overflow-y: auto;
   overflow-x: hidden;
   transform-origin: center center;
-  will-change: transform, opacity;
-  transition:
-    transform 0.7s cubic-bezier(0.16,1,0.3,1),
-    opacity   0.7s cubic-bezier(0.16,1,0.3,1),
-    filter    0.4s ease;
-}
-
-/* ── Los tres estados de pose — profundidad real en el eje Z ─────────────────
-
-   out-back  → esperando en las profundidades: translateZ(-200px) scale(0.85), opacity 0
-   active    → donde está el usuario ahora:    translateZ(0)      scale(1),    opacity 1
-   out-front → ya atravesada, viene hacia el usuario y se disuelve:
-               translateZ(100px) scale(1.15), opacity 0
-
-   pointer-events:none en estados inactivos previene clics fantasma.
-────────────────────────────────────────────────────────────────────────── */
-.deep-layer[data-state="out-back"] {
-  transform: translateZ(-200px) scale(0.85);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.deep-layer[data-state="active"] {
-  transform: translateZ(0) scale(1);
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.deep-layer[data-state="out-front"] {
-  transform: translateZ(100px) scale(1.15);
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* Capa 2 (overlays: puzzle, laboratorio, misión activa) — al abrirse, difumina
-   y oscurece la capa de contenido detrás (Capa 1), aplicado por DeepNavEngine
-   vía setOverlayOpen() sobre la capa activa. */
-.deep-layer.layer-dimmed {
-  filter: blur(20px) brightness(0.6);
+  will-change: transform, opacity, filter;
+  /* Línea base antes de que DeepNavEngine aplique el z-index real por bucket
+     (ver BUCKET_Z) — evita z-index:auto (orden de DOM) en el primer frame. */
+  z-index: 1;
 }
 
 /* ── Fondo — respira cuando el usuario profundiza ───────────────────────────
@@ -370,16 +342,11 @@ body.ls-pre #premium-bg {
 }
 
 /* ── Accesibilidad: prefers-reduced-motion ──────────────────────────────────
-   Sin scale. Solo fade rápido de opacity. Fondo estático.
+   .deep-layer ya no anima transform con reduced-motion — eso lo decide
+   DeepNavEngine.tsx en JS (rama `reduced.current`, solo fade de opacity).
+   Acá solo queda inmóvil el fondo.
 ────────────────────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .deep-layer {
-    transition: opacity 0.3s ease !important;
-  }
-  .deep-layer[data-state="out-back"],
-  .deep-layer[data-state="out-front"] {
-    transform: none !important;
-  }
   #premium-bg,
   #premium-bg.breathed-in {
     transform: none !important;

@@ -649,9 +649,14 @@ export function ConstellationsSection() {
       setOffset(next); offsetRef.current=next
       return
     }
+    // Compensa la magnificación por perspectiva de la capa activa (translateZ
+    // en DeepNavEngine.tsx) — sin esto, el hit-test de estrellas quedaría
+    // corrido respecto a lo que se ve en pantalla.
     const rect=(e.currentTarget as HTMLElement).getBoundingClientRect()
-    const mx=e.clientX-rect.left+offsetRef.current.x
-    const my=e.clientY-rect.top+offsetRef.current.y
+    const target = e.currentTarget as HTMLElement
+    const sx = target.offsetWidth / rect.width, sy = target.offsetHeight / rect.height
+    const mx=(e.clientX-rect.left)*sx+offsetRef.current.x
+    const my=(e.clientY-rect.top)*sy+offsetRef.current.y
     let found: ConstellationData|null=null
     for (const c of [...constellations, ...customRef.current]) {
       if (filter!=='all'&&c.type!==filter) continue
@@ -712,7 +717,8 @@ export function ConstellationsSection() {
       if (!didDrag.current && e.changedTouches.length) {
         const t = e.changedTouches[0]
         const rect = el.getBoundingClientRect()
-        const found = findAt(t.clientX - rect.left + offsetRef.current.x, t.clientY - rect.top + offsetRef.current.y)
+        const sx = el.offsetWidth / rect.width, sy = el.offsetHeight / rect.height
+        const found = findAt((t.clientX - rect.left) * sx + offsetRef.current.x, (t.clientY - rect.top) * sy + offsetRef.current.y)
         if (found) { panTo(found); setSelected(found) }
       }
     }
@@ -1021,9 +1027,17 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
       draw()
     }
 
-    const handleClick = (e:MouseEvent) => {
+    // La capa activa del stack 3D avanza con translateZ (ver DeepNavEngine.tsx),
+    // lo que la magnifica levemente por la perspectiva — sin esta corrección,
+    // un click cerca del borde caería un poco afuera de donde se ve la estrella.
+    const readPoint = (e: MouseEvent) => {
       const r = canvas.getBoundingClientRect()
-      const mx = e.clientX - r.left, my = e.clientY - r.top
+      const sx = canvas.offsetWidth / r.width, sy = canvas.offsetHeight / r.height
+      return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy }
+    }
+
+    const handleClick = (e:MouseEvent) => {
+      const { x: mx, y: my } = readPoint(e)
       const m = modeRef.current
       if (m === 'star') {
         starsRef.current = [...starsRef.current, {x:mx, y:my}]
@@ -1055,8 +1069,7 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
     }
 
     const handleMove = (e:MouseEvent) => {
-      const r = canvas.getBoundingClientRect()
-      mouseRef.current = {x: e.clientX - r.left, y: e.clientY - r.top}
+      mouseRef.current = readPoint(e)
       const near = getHit(mouseRef.current.x, mouseRef.current.y)
       canvas.style.cursor =
         modeRef.current === 'star'  ? 'cell' :

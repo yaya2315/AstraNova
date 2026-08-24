@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import LoadingScreen from '@/components/LoadingScreen'
 import { DeepNavProvider, useDeepNav, LAYERS } from '@/components/DeepNavEngine'
 import PremiumSpaceExperience from '@/components/PremiumSpaceExperience'
+import CockpitFrame from '@/components/CockpitFrame'
 import SideNav from '@/components/SideNav'
 import MiniSolarSystem from '@/components/MiniSolarSystem'
 import { NAV_ITEMS } from '@/lib/navItems'
@@ -357,6 +358,10 @@ export default function Home() {
 
       {/* PIEZA 3: Stack de capas — todas en el mismo punto del espacio */}
       <LayerStack />
+
+      {/* PIEZA 4: Marco de la cubierta de observación — decorativo, por encima
+          del stack, por debajo del HUD fijo */}
+      <CockpitFrame />
     </DeepNavProvider>
     </>
   )
