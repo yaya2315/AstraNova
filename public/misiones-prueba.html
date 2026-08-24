@@ -16,6 +16,10 @@
   <button id="abrir">Abrir misión de prueba</button>
   <button id="abrir-europa">Abrir Europa Clipper</button>
   <button id="abrir-europa-accesible">Abrir Europa Clipper (modo accesible)</button>
+  <button id="abrir-webb-n1">Abrir Webb (N1)</button>
+  <button id="abrir-webb-n2">Abrir Webb (N2)</button>
+  <button id="abrir-webb-n3">Abrir Webb (N3, bloqueados)</button>
+  <button id="abrir-webb-accesible">Abrir Webb (modo accesible)</button>
   <div id="estado"></div>
 
   <script type="module">
@@ -24,6 +28,7 @@
 
     registrarMision('prueba', () => import('/misiones/juegos/_prueba.js'))
     registrarMision('europa', () => import('/misiones/juegos/mision-europa-senales.js'))
+    registrarMision('webb', () => import('/misiones/juegos/mision-webb-espejos.js'))
 
     document.getElementById('abrir').addEventListener('click', () => {
       abrirMision('prueba')
@@ -33,6 +38,18 @@
     })
     document.getElementById('abrir-europa-accesible').addEventListener('click', () => {
       abrirMision('europa', { dificultad: 2, modoAccesible: true, semilla: 42 })
+    })
+    document.getElementById('abrir-webb-n1').addEventListener('click', () => {
+      abrirMision('webb', { dificultad: 1, modoAccesible: false, semilla: 7 })
+    })
+    document.getElementById('abrir-webb-n2').addEventListener('click', () => {
+      abrirMision('webb', { dificultad: 2, modoAccesible: false, semilla: 7 })
+    })
+    document.getElementById('abrir-webb-n3').addEventListener('click', () => {
+      abrirMision('webb', { dificultad: 3, modoAccesible: false, semilla: 7 })
+    })
+    document.getElementById('abrir-webb-accesible').addEventListener('click', () => {
+      abrirMision('webb', { dificultad: 2, modoAccesible: true, semilla: 7 })
     })
 
     const estado = document.getElementById('estado')
