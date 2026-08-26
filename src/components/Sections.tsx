@@ -267,7 +267,7 @@ export function HeroSection() {
         style={{ y: contentY, opacity: contentOp }}
         className="w-full flex flex-col gap-10 relative z-[1]"
       >
-        <div className="max-w-[1440px] mx-auto w-full px-6 lg:pl-[100px]">
+        <div className="max-w-[1440px] mx-auto w-full px-6 sm:px-8 md:px-12 lg:pl-[100px]">
           <motion.div
             initial={{ opacity: 0 }}
             animate={heroReady ? { opacity: 1 } : {}}
@@ -429,7 +429,7 @@ export function HistorySection() {
 
   return (
     <section id="historia" className="relative z-[1] pt-40 pb-24">
-      <div className="max-w-[1320px] mx-auto px-6">
+      <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12">
 
         {/* Zone header */}
         <FadeUp className="text-center mb-4">
@@ -744,7 +744,7 @@ export function ConstellationsSection() {
 
   return (
     <section id="constelaciones" className="relative z-[1] pt-40 pb-24">
-      <div className="max-w-[1400px] mx-auto px-6">
+      <div className="max-w-[1400px] mx-auto px-6 sm:px-8 md:px-12">
         <FadeUp className="text-center mb-4"><ZoneLabel text="MAPA ESTELAR" /></FadeUp>
         <FadeUp className="text-center" delay={0.1}>
           <h2 className="font-serif text-[clamp(2.6rem,5.5vw,4.5rem)] text-white/75 font-normal italic mb-3">Constelaciones</h2>
@@ -765,7 +765,7 @@ export function ConstellationsSection() {
         </FadeUp>
       </div>
 
-      <FadeUp delay={0.25} className="px-6 max-w-[1400px] mx-auto">
+      <FadeUp delay={0.25} className="px-6 sm:px-8 md:px-12 max-w-[1400px] mx-auto">
         <div
           ref={containerRef}
           className="relative overflow-hidden select-none rounded-2xl w-full"
@@ -1142,7 +1142,7 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
   ]
 
   return (
-    <FadeUp delay={0.3} className="max-w-[1400px] mx-auto px-6 mt-14 pb-6">
+    <FadeUp delay={0.3} className="max-w-[1400px] mx-auto px-6 sm:px-8 md:px-12 mt-14 pb-6">
       <div className="card-glass-static overflow-hidden">
 
         {/* Header */}
@@ -1217,7 +1217,7 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
 export function GallerySection() {
   return (
     <section id="galeria" className="relative z-[1] pt-40 pb-24">
-      <div className="max-w-[1400px] mx-auto px-6">
+      <div className="max-w-[1400px] mx-auto px-6 sm:px-8 md:px-12">
 
         <FadeUp className="text-center mb-4">
           <ZoneLabel text="FOTOGRAFÍA ESPACIAL" />
@@ -1815,7 +1815,7 @@ export function MissionsSection() {
 
   return (
     <section id="misiones" className="relative z-[1] pt-40 pb-24">
-      <div className="max-w-[1320px] mx-auto px-6">
+      <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12">
 
         <FadeUp className="text-center mb-4">
           <ZoneLabel text="CENTRO DE CONTROL" />
@@ -1897,7 +1897,7 @@ export function Footer() {
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[320px] h-px"
         style={{ background: 'linear-gradient(90deg, transparent, rgba(110,231,255,0.18), transparent)' }} />
 
-      <div className="max-w-[1320px] mx-auto px-6 flex flex-col items-center gap-12">
+      <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12 flex flex-col items-center gap-12">
 
         {/* Wordmark */}
         <div className="text-center">

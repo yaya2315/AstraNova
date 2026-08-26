@@ -110,7 +110,7 @@ function calcularLayoutHex(hexes) {
       altoHexPct,
     })
   }
-  return { posiciones, aspecto: rangoX / rangoY }
+  return { posiciones, aspecto: rangoX / rangoY, anchoHexPct }
 }
 
 // ── Componente principal ─────────────────────────────────────────────────
@@ -432,7 +432,11 @@ export function crearMision(contenedor, opciones) {
 
 // ── Plantilla de DOM ──────────────────────────────────────────────────────
 function plantilla(tablero, layout, bloqueados, modoAccesible) {
-  const anchoMinimo = tablero.hexes.length > 10 ? 460 : 300
+  // Ancho mínimo real para que cada hexágono nunca baje de 48px (spec de
+  // Webb), derivado de la geometría del tablero — no un número inventado.
+  // El anterior (460px fijo) era muy conservador y forzaba scroll horizontal
+  // incluso en teléfonos donde 48px por hexágono ya entraba de sobra.
+  const anchoMinimo = Math.ceil(4800 / layout.anchoHexPct)
   return `
     <div class="mwe-zona-panal">
       <div class="mwe-panal" role="group" aria-label="Panal de espejos" style="aspect-ratio:${layout.aspecto};min-width:${anchoMinimo}px">

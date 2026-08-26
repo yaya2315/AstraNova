@@ -293,7 +293,7 @@ function LayerStack() {
       {/* ── Capa 1 — Sistema Solar ──────────────────────────────────────── */}
       <div id="layer-1" className="deep-layer" aria-label="Sistema Solar">
         <section id="sistema-solar" className="relative z-[1] py-20">
-          <div className="max-w-[1320px] mx-auto px-6">
+          <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12">
             <div className="text-center">
               <div className="section-label">EXPLORACIÓN INTERACTIVA</div>
             </div>
@@ -305,7 +305,7 @@ function LayerStack() {
               pasa el cursor sobre cualquier planeta para descubrir sus secretos.
             </p>
           </div>
-          <div className="max-w-[1400px] mx-auto px-4">
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 md:px-10">
             <SolarSystem />
           </div>
         </section>
