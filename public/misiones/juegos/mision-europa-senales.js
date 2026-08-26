@@ -1,54 +1,47 @@
-// mision-europa-senales.js — «Secuencia de Señales» (Europa Clipper)
-// Ritmo y memoria espectral. El instrumento REASON dispara pulsos de radar
-// que atraviesan el hielo y rebotan en la interfaz hielo-océano; el retardo
-// del eco revela el grosor del hielo. Este juego es esa operación, convertida
-// en ritmo: escuchar una secuencia de pulsos y retransmitirla en el momento
-// exacto — con algunos pulsos "tapados" por interferencia joviana que hay que
-// deducir por la estructura del patrón, no adivinar al azar.
+// mision-europa-senales.js — «Sondeo de Hielo» (Europa Clipper)
+// Regla única: tocá la columna donde el hielo es más fino. El radar REASON
+// hace justo eso — mide cuánto tarda el eco en volver desde el fondo del
+// hielo, y donde el eco vuelve más rápido es donde el hielo es más delgado
+// y el océano subglacial está más cerca de la superficie.
 import { suscribir } from '../nucleo/bucle-animacion.js'
 import { crearEntrada } from '../nucleo/entrada-unificada.js'
 import { tono, ruido } from '../nucleo/audio-mision.js'
 import { evaluarEstrellas } from '../nucleo/evaluador-estrellas.js'
+import { crearAyuda, registrarDibujo } from '../nucleo/ayuda-paso-a-paso.js'
+
+// Dibujos específicos de este juego para el panel de ayuda.
+registrarDibujo('ees-comparar', () => `
+  <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="30" width="26" height="70" rx="3" fill="currentColor" opacity=".35"/>
+    <rect x="87" y="66" width="26" height="34" rx="3" fill="currentColor"/>
+    <rect x="134" y="46" width="26" height="54" rx="3" fill="currentColor" opacity=".35"/>
+    <path d="M100 108 L100 116" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    <path d="M92 112 L100 118 L108 112" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`)
+registrarDibujo('ees-oceano', () => `
+  <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="70" y="20" width="60" height="24" rx="3" fill="currentColor" opacity=".85"/>
+    <rect x="20" y="44" width="160" height="56" rx="4" fill="currentColor" opacity=".18"/>
+    <circle class="ayuda-dibujo-onda ayuda-dibujo-onda1" cx="100" cy="72" r="10" stroke="currentColor" stroke-width="2.5" opacity=".7"/>
+    <circle class="ayuda-dibujo-onda ayuda-dibujo-onda2" cx="100" cy="72" r="18" stroke="currentColor" stroke-width="2.5" opacity=".35"/>
+  </svg>`)
 
 export const meta = {
-  titulo: 'Europa Clipper · Secuencia de Señales',
+  titulo: 'Europa Clipper · Sondeo de Hielo',
   acento: '#5FD9C4',
-  objetivo: 'Escuchá la secuencia de pulsos de radar y retransmitíla en el momento exacto.',
-  datoInicial: 'El radar REASON de Europa Clipper atraviesa la corteza de hielo y rebota en el océano subglacial de abajo — el retardo del eco revela cuán grueso es el hielo.',
-  datoCierre: 'REASON puede sondear hasta 30 km de profundidad en el hielo de Europa, buscando el océano líquido que se sospecha esconde debajo.',
+  objetivo: 'Tocá la columna donde el hielo es más fino.',
+  datoInicial: 'El radar REASON de Europa Clipper mide cuánto tarda en volver el eco desde el fondo del hielo — más rápido el eco, más fino el hielo.',
+  datoCierre: 'El hielo de Europa puede tener hasta 30 km de espesor. Los científicos buscan justo los puntos más finos: ahí el océano escondido debajo está más cerca de la superficie.',
 }
-
-// ── Constantes de la mecánica ────────────────────────────────────────────
-const NOTAS = [
-  { nombre: 'D3', frecuencia: 146.83 },
-  { nombre: 'F3', frecuencia: 174.61 },
-  { nombre: 'A3', frecuencia: 220.00 },
-  { nombre: 'C4', frecuencia: 261.63 },
-  { nombre: 'E4', frecuencia: 329.63 },
-]
-const TECLAS_CARRIL = ['1', '2', '3', '4', '5']
-const TECLAS_CARRIL_ALT = ['a', 's', 'd', 'f', 'g']
-
-const BPM_BASE = 100
-const DURACION_NOTA = 0.12       // segundos
-const RONDAS_POR_PARTIDA = 3
-const COLA_FINAL_S = 0.6         // silencio tras el último pulso antes de retransmitir
-const PRECISION_3_ESTRELLAS = 0.8
-const VENTANA_PRECISION_MS = 40  // umbral de "golpe preciso" para 3 estrellas
 
 const PARAMETROS_DIFICULTAD = {
-  1: { pulsosBase: 3, ocultos: 0, ventanaMs: 180, factorTempo: 1 },
-  2: { pulsosBase: 5, ocultos: 1, ventanaMs: 140, factorTempo: 1 },
-  3: { pulsosBase: 7, ocultos: 2, ventanaMs: 100, factorTempo: 1.15 },
+  1: { columnas: 5, brecha: 0.32 },
+  2: { columnas: 7, brecha: 0.18 },
+  3: { columnas: 9, brecha: 0.09 },
 }
 
-const DATOS_HIELO = [
-  'En esta franja el hielo mide unos 15 km de espesor.',
-  'Acá la corteza helada alcanza casi 25 km — más gruesa que en otras zonas.',
-  'El hielo aquí es más fino: apenas 10 km sobre el océano líquido.',
-]
+const SEGUNDOS_PISTA_AUTOMATICA = 45
 
-// ── PRNG determinista (mulberry32) — misma semilla, misma partida ───────
 function crearAleatorio(semilla) {
   let estado = semilla >>> 0
   return function () {
@@ -59,107 +52,33 @@ function crearAleatorio(semilla) {
   }
 }
 
-// ── Generación de secuencias con estructura real ─────────────────────────
-// Nunca carriles al azar puro: cada secuencia sigue uno de estos patrones
-// completos, así CUALQUIER posición interior (salvo la primera/última) es
-// deducible por continuidad del propio patrón — condición necesaria para que
-// ocultar un pulso sea "justo" y no una adivinanza.
-function generarSecuenciaCarriles(azar, longitud) {
-  const generadores = [
-    // Rebote triangular: sube y baja entre los bordes del rango de carriles.
-    () => {
-      const patron = []
-      let carril = Math.floor(azar() * 3) // arranca en 0,1,2 → deja margen para subir
-      let direccion = 1
-      for (let i = 0; i < longitud; i++) {
-        patron.push(carril)
-        carril += direccion
-        if (carril >= 4) { carril = 4; direccion = -1 }
-        else if (carril <= 0) { carril = 0; direccion = 1 }
-      }
-      return patron
-    },
-    // Alternancia entre dos carriles fijos (llamada-respuesta).
-    () => {
-      const a = Math.floor(azar() * 5)
-      let b = Math.floor(azar() * 4)
-      if (b >= a) b += 1
-      return Array.from({ length: longitud }, (_, i) => (i % 2 === 0 ? a : b))
-    },
-    // Arco simétrico (palíndromo): sube y refleja.
-    () => {
-      const patron = []
-      const paso = azar() > 0.5 ? 1 : -1
-      let carril = paso === 1 ? 0 : 4
-      let direccion = paso
-      for (let i = 0; i < longitud; i++) {
-        patron.push(carril)
-        if (i < Math.floor(longitud / 2) - 0.5) {
-          carril += direccion
-          if (carril >= 4 || carril <= 0) direccion *= -1
-        } else {
-          carril -= direccion
-        }
-      }
-      return patron
-    },
-    // Escalón de a pares (0,0,1,1,2,2,...) — motivo muy reconocible al oído.
-    () => {
-      const patron = []
-      let carril = Math.floor(azar() * 5)
-      while (patron.length < longitud) {
-        patron.push(carril, carril)
-        carril = (carril + 1) % 5
-      }
-      return patron.slice(0, longitud)
-    },
+// Nunca alturas totalmente al azar: se fija primero cuál columna es la más
+// fina y recién después se generan las demás, todas por encima de ella por
+// al menos `brecha` — así siempre hay una única respuesta correcta y nunca
+// un empate imposible de resolver a ojo.
+function generarRonda(azar, config) {
+  const n = config.columnas
+  const posicionFina = Math.floor(azar() * n)
+  const alturas = new Array(n)
+  alturas[posicionFina] = 0.12 + azar() * 0.1
+  for (let i = 0; i < n; i++) {
+    if (i === posicionFina) continue
+    const piso = alturas[posicionFina] + config.brecha
+    alturas[i] = Math.min(1, piso + azar() * (1 - piso))
+  }
+  return { alturas, posicionFina, resuelto: false }
+}
+
+function generarSecuenciaRondas(dificultad) {
+  const d = PARAMETROS_DIFICULTAD[dificultad]
+  return [
+    { columnas: 3, brecha: 0.55 },
+    { columnas: 4, brecha: 0.4 },
+    { columnas: d.columnas, brecha: d.brecha },
+    { columnas: d.columnas, brecha: d.brecha },
   ]
-  const elegido = generadores[Math.floor(azar() * generadores.length)]
-  return elegido()
 }
 
-// Elige qué índices ocultar: nunca el primero ni el último, nunca dos
-// consecutivos — así el hueco siempre está rodeado de pulsos audibles que
-// permiten deducirlo por continuidad del patrón.
-function elegirIndicesOcultos(azar, longitud, cantidad) {
-  if (cantidad <= 0) return new Set()
-  const candidatos = []
-  for (let i = 1; i < longitud - 1; i++) candidatos.push(i)
-  for (let i = candidatos.length - 1; i > 0; i--) {
-    const j = Math.floor(azar() * (i + 1))
-    ;[candidatos[i], candidatos[j]] = [candidatos[j], candidatos[i]]
-  }
-  const elegidos = []
-  for (const idx of candidatos) {
-    if (elegidos.length >= cantidad) break
-    if (!elegidos.some((e) => Math.abs(e - idx) === 1)) elegidos.push(idx)
-  }
-  return new Set(elegidos)
-}
-
-function generarRonda(azar, dificultad, numeroRonda) {
-  const params = PARAMETROS_DIFICULTAD[dificultad]
-  const longitud = params.pulsosBase + (numeroRonda - 1) // la secuencia crece dentro de la partida
-  const bpm = BPM_BASE * params.factorTempo
-  const intervaloMs = (60000 / bpm) / 2 // corchea
-
-  const carriles = generarSecuenciaCarriles(azar, longitud)
-  const ocultos = elegirIndicesOcultos(azar, longitud, params.ocultos)
-
-  const secuencia = carriles.map((carril, i) => ({
-    carril,
-    t: i * intervaloMs,
-    oculto: ocultos.has(i),
-    resuelto: false,
-    acierto: null,
-    desviacionMs: null,
-  }))
-
-  const duracionMs = secuencia[secuencia.length - 1].t + DURACION_NOTA * 1000 + COLA_FINAL_S * 1000
-  return { secuencia, duracionMs, ventanaMs: params.ventanaMs }
-}
-
-// ── Componente principal ─────────────────────────────────────────────────
 export function crearMision(contenedor, opciones) {
   const azar = crearAleatorio(opciones.semilla >>> 0 || Date.now())
   const escuchas = new Map()
@@ -171,397 +90,225 @@ export function crearMision(contenedor, opciones) {
   let pausado = false
   let quitarSuscripcion = null
   let entrada = null
-  let quitarLimpiezaTeclado = null
+  let quitarTeclado = null
 
-  let rondaActual = 1
+  const secuenciaRondas = generarSecuenciaRondas(opciones.dificultad)
+  let indiceRonda = 0
   let ronda = null
-  let faseActual = 'escucha' // 'escucha' | 'retransmision' | 'entre-rondas'
-  // Acumulador de tiempo de fase en ms — se suma dt solo cuando no está
-  // pausado, así pausar/reanudar no produce saltos (a diferencia de leer
-  // performance.now() directamente, que sigue corriendo durante la pausa).
-  let tiempoFaseMs = 0
-  let indiceSiguientePulso = 0
-  let pulsosVisuales = [] // { carril, tiempoInicio } — decaimiento del osciloscopio
-  let flashFallo = 0      // >0 mientras dura el glitch visual de un fallo
+  let fallosReales = 0
+  let tiempoInactividad = 0
+  let manitaEl = null
 
-  const fallosPorRonda = []
-  const totalPulsosPorRonda = []
-  let desviacionesAciertoMs = []
-
-  // -- construcción del DOM --
   const estilo = document.createElement('style')
   estilo.textContent = CSS_JUEGO
   contenedor.appendChild(estilo)
 
   const raiz = document.createElement('div')
-  raiz.className = 'ems-raiz'
-  raiz.innerHTML = opciones.modoAccesible ? plantillaAccesible() : plantillaEstandar()
+  raiz.className = 'ees-raiz'
+  raiz.innerHTML = `
+    <div class="ees-columnas" role="group" aria-label="Corte del hielo de Europa"></div>
+    <p class="ees-anuncio" aria-live="polite"></p>
+  `
   contenedor.appendChild(raiz)
 
-  const hud = raiz.querySelector('.ems-hud')
+  const columnasEl = raiz.querySelector('.ees-columnas')
+  const anuncioEl = raiz.querySelector('.ees-anuncio')
+  const elementosColumna = []
 
-  function actualizarHud() {
-    const totalFallos = fallosPorRonda.reduce((a, b) => a + b, 0)
-    hud.textContent = `Ronda ${rondaActual} / ${RONDAS_POR_PARTIDA} · Fallos: ${totalFallos}`
+  function anunciar(texto) {
+    anuncioEl.textContent = texto
   }
 
-  // ══════════════════════════════════════════════════════════════════════
-  //  MODO ESTÁNDAR — osciloscopio + línea de tiempo en vivo
-  // ══════════════════════════════════════════════════════════════════════
-  let canvasOsciloscopio, ctxOsciloscopio, canvasHielo, ctxHielo, lineaTiempo, botonesCarril
+  function nivelGrosor(altura) {
+    return Math.max(1, Math.min(10, Math.round(altura * 10)))
+  }
 
-  function montarModoEstandar() {
-    canvasOsciloscopio = raiz.querySelector('.ems-osciloscopio')
-    canvasHielo = raiz.querySelector('.ems-hielo')
-    lineaTiempo = raiz.querySelector('.ems-linea-tiempo')
-    botonesCarril = [...raiz.querySelectorAll('.ems-carril')]
-    redimensionarCanvas(canvasOsciloscopio)
-    redimensionarCanvas(canvasHielo)
-    ctxOsciloscopio = canvasOsciloscopio.getContext('2d')
-    ctxHielo = canvasHielo.getContext('2d')
+  function construirColumnasDOM() {
+    elementosColumna.length = 0
+    columnasEl.innerHTML = ronda.alturas.map((_, i) => `
+      <button type="button" class="ees-columna" data-i="${i}" tabindex="${i === 0 ? 0 : -1}">
+        <span class="ees-hielo"></span>
+        <span class="ees-manita-slot"></span>
+      </button>`).join('')
+    columnasEl.querySelectorAll('.ees-columna').forEach((el) => elementosColumna.push(el))
+    pintarColumnas()
+  }
 
-    botonesCarril.forEach((boton, i) => {
-      boton.addEventListener('click', () => intentarGolpe(i))
-    })
-
-    entrada = crearEntrada(raiz)
-    quitarLimpiezaTeclado = entrada.on('tecla-abajo', ({ tecla }) => {
-      const iNum = TECLAS_CARRIL.indexOf(tecla)
-      const iAlt = TECLAS_CARRIL_ALT.indexOf(tecla)
-      const i = iNum >= 0 ? iNum : iAlt
-      if (i >= 0) intentarGolpe(i)
+  function pintarColumnas() {
+    ronda.alturas.forEach((altura, i) => {
+      const el = elementosColumna[i]
+      if (!el) return
+      el.querySelector('.ees-hielo').style.height = `${altura * 100}%`
+      el.setAttribute('aria-label', `Columna ${i + 1}, grosor de hielo ${nivelGrosor(altura)} de 10`)
+      el.classList.toggle('ees-columna--resuelta', !!ronda.resuelto && i === ronda.posicionFina)
     })
   }
 
-  function redimensionarCanvas(canvas) {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    const r = canvas.getBoundingClientRect()
-    canvas.width = Math.max(1, Math.round(r.width * dpr))
-    canvas.height = Math.max(1, Math.round(r.height * dpr))
-    canvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0)
+  function quitarManita() {
+    manitaEl?.remove()
+    manitaEl = null
   }
 
-  function dibujarOsciloscopio(tiempoFaseMs) {
-    const w = canvasOsciloscopio.clientWidth
-    const h = canvasOsciloscopio.clientHeight
-    ctxOsciloscopio.clearRect(0, 0, w, h)
-    const altoCarril = h / NOTAS.length
-
-    // Jitter de glitch cuando hay un fallo reciente — "la onda se distorsiona".
-    const jitter = flashFallo > 0 ? (Math.random() - 0.5) * 10 * flashFallo : 0
-
-    for (let i = 0; i < NOTAS.length; i++) {
-      const y = altoCarril * i + altoCarril / 2
-      ctxOsciloscopio.strokeStyle = 'rgba(95,217,196,0.18)'
-      ctxOsciloscopio.lineWidth = 1
-      ctxOsciloscopio.beginPath()
-      ctxOsciloscopio.moveTo(0, y)
-      ctxOsciloscopio.lineTo(w, y)
-      ctxOsciloscopio.stroke()
-    }
-
-    for (const p of pulsosVisuales) {
-      const edad = tiempoFaseMs - p.tiempoInicio
-      if (edad < 0 || edad > 260) continue
-      const decaimiento = 1 - edad / 260
-      const y = altoCarril * p.carril + altoCarril / 2
-      const amplitud = altoCarril * 0.38 * decaimiento
-      ctxOsciloscopio.strokeStyle = `rgba(95,217,196,${0.9 * decaimiento})`
-      ctxOsciloscopio.lineWidth = 2.5
-      ctxOsciloscopio.beginPath()
-      const ancho = 46
-      const cx = Math.min(w - 4, Math.max(4, (edad / 260) * ancho + 4))
-      for (let x = -ancho / 2; x <= ancho / 2; x += 2) {
-        const px = cx + x + jitter
-        const py = y - Math.sin((x / (ancho / 2)) * Math.PI) * amplitud * Math.exp(-Math.abs(x) / (ancho / 2.2))
-        if (x === -ancho / 2) ctxOsciloscopio.moveTo(px, py)
-        else ctxOsciloscopio.lineTo(px, py)
-      }
-      ctxOsciloscopio.stroke()
-    }
+  function mostrarManita(i, { persistente = false } = {}) {
+    quitarManita()
+    const slot = elementosColumna[i]?.querySelector('.ees-manita-slot')
+    if (!slot) return
+    manitaEl = document.createElement('div')
+    manitaEl.className = 'ees-manita'
+    manitaEl.innerHTML = `
+      <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="30" cy="24" r="14" fill="currentColor" opacity=".25"/>
+        <circle cx="30" cy="24" r="7" fill="currentColor"/>
+      </svg>`
+    slot.appendChild(manitaEl)
+    if (!persistente) setTimeout(quitarManita, 2600)
   }
 
-  function dibujarHielo() {
-    const w = canvasHielo.clientWidth
-    const h = canvasHielo.clientHeight
-    ctxHielo.clearRect(0, 0, w, h)
-    const n = ronda.secuencia.length
-    const anchoFranja = h / n // el corte es vertical (apilado de arriba a abajo)
-
-    for (let i = 0; i < n; i++) {
-      const pulso = ronda.secuencia[i]
-      const y = i * anchoFranja
-      const perforado = pulso.resuelto && pulso.acierto
-      const gradiente = ctxHielo.createLinearGradient(0, y, w, y)
-      if (perforado) {
-        gradiente.addColorStop(0, 'rgba(10,30,45,0.92)')
-        gradiente.addColorStop(1, 'rgba(20,60,80,0.75)')
-      } else {
-        gradiente.addColorStop(0, 'rgba(210,240,238,0.9)')
-        gradiente.addColorStop(1, 'rgba(150,200,210,0.75)')
-      }
-      ctxHielo.fillStyle = gradiente
-      ctxHielo.fillRect(0, y + 1, w, anchoFranja - 2)
-    }
-
-    if (flashFallo > 0) {
-      ctxHielo.fillStyle = `rgba(255,143,163,${0.25 * flashFallo})`
-      for (let i = 0; i < 40; i++) {
-        ctxHielo.fillRect(Math.random() * w, Math.random() * h, 2, 2)
-      }
-    }
+  function resaltarPistaColumna() {
+    if (destruido || !ronda || ronda.resuelto) return
+    mostrarManita(ronda.posicionFina)
   }
 
-  function intentarGolpe(carrilIndex) {
-    if (faseActual !== 'retransmision') return
-    let objetivo = null
-    for (const p of ronda.secuencia) {
-      if (p.resuelto) continue
-      if (Math.abs(tiempoFaseMs - p.t) <= ronda.ventanaMs) { objetivo = p; break }
-    }
-    if (!objetivo) return // pulsación fuera de ventana: no penaliza, se ignora
+  function reproducirAcierto(i) {
+    const el = elementosColumna[i]
+    el?.classList.add('ees-columna--pulso')
+    setTimeout(() => el?.classList.remove('ees-columna--pulso'), 900)
+    tono({ frecuencia: 520, duracion: .18, tipo: 'triangle', ganancia: .18 })
+    setTimeout(() => tono({ frecuencia: 780, duracion: .22, tipo: 'sine', ganancia: .16 }), 90)
+  }
 
-    objetivo.resuelto = true
-    const acierto = objetivo.carril === carrilIndex
-    objetivo.acierto = acierto
-    objetivo.desviacionMs = Math.abs(tiempoFaseMs - objetivo.t)
+  function reproducirFallo(i) {
+    const el = elementosColumna[i]
+    el?.classList.add('ees-columna--fallo')
+    setTimeout(() => el?.classList.remove('ees-columna--fallo'), 320)
+    ruido({ duracion: .2, filtro: 700, ganancia: .1 })
+  }
 
-    const boton = botonesCarril[carrilIndex]
-    if (acierto) {
-      boton.classList.remove('ems-carril--flash-fallo')
-      boton.classList.add('ems-carril--flash-ok')
-      setTimeout(() => boton.classList.remove('ems-carril--flash-ok'), 220)
-      tono({ frecuencia: NOTAS[carrilIndex].frecuencia / 2, duracion: 0.15, tipo: 'triangle', ganancia: 0.18 })
-      desviacionesAciertoMs.push(objetivo.desviacionMs)
+  function manejarClicColumna(i) {
+    if (destruido || pausado || !ronda || ronda.resuelto) return
+    quitarManita()
+    tiempoInactividad = 0
+    ayuda?.marcarLogro()
+    if (i === ronda.posicionFina) {
+      ronda.resuelto = true
+      pintarColumnas()
+      reproducirAcierto(i)
+      anunciar('¡Ahí! Ese es el punto más fino.')
+      emitir('progreso', (indiceRonda + 1) / secuenciaRondas.length)
+      setTimeout(finalizarRonda, 900)
     } else {
-      registrarFallo(boton)
+      if (indiceRonda >= 2) fallosReales += 1
+      reproducirFallo(i)
+      anunciar('Ahí no — probá con otra columna.')
     }
   }
 
-  function registrarFallo(boton) {
-    fallosPorRonda[rondaActual - 1] += 1
-    flashFallo = 1
-    ruido({ duracion: 0.25, filtro: 800, ganancia: 0.12 })
-    if (boton) {
-      boton.classList.add('ems-carril--flash-fallo')
-      setTimeout(() => boton.classList.remove('ems-carril--flash-fallo'), 260)
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════════════
-  //  MODO ACCESIBLE — fichas reordenables, sin presión de tiempo
-  // ══════════════════════════════════════════════════════════════════════
-  let fichasEl, ordenActual, focoFicha
-
-  function montarModoAccesible() {
-    fichasEl = raiz.querySelector('.ems-fichas')
-    // El corte de hielo (zona-derecha) es común a ambos modos, pero solo
-    // montarModoEstandar() lo inicializaba — sin esto, cuadro() crashea acá
-    // apenas entra a la fase 'entre-rondas' con canvasHielo aún undefined.
-    canvasHielo = raiz.querySelector('.ems-hielo')
-    redimensionarCanvas(canvasHielo)
-    ctxHielo = canvasHielo.getContext('2d')
-    // El primer dibujado real lo hace iniciarRonda() (llamada justo después,
-    // desde iniciar()), una vez que existe `ordenActual` — dibujar acá antes
-    // de esa ronda inicial rompe con "ordenActual is undefined".
-    raiz.querySelector('[data-accion="verificar-orden"]').addEventListener('click', verificarOrdenAccesible)
-  }
-
-  function dibujarFichasAccesibles() {
-    fichasEl.innerHTML = ''
-    ordenActual.forEach((indiceOriginal, posicion) => {
-      const pulso = ronda.secuencia[indiceOriginal]
-      const ficha = document.createElement('div')
-      ficha.className = 'ems-ficha'
-      ficha.tabIndex = posicion === focoFicha ? 0 : -1
-      ficha.dataset.posicion = String(posicion)
-
-      if (pulso.oculto) {
-        ficha.innerHTML = `
-          <span class="ems-ficha-etiqueta">?</span>
-          <div class="ems-ficha-selector" role="group" aria-label="Elegí el carril para esta ficha oculta">
-            ${NOTAS.map((n, i) => `<button type="button" data-asignar="${i}" aria-pressed="${pulso.carrilAsignado === i}">${n.nombre}</button>`).join('')}
-          </div>`
-      } else {
-        ficha.innerHTML = `<span class="ems-ficha-etiqueta">${NOTAS[pulso.carril].nombre}</span>
-          <button type="button" class="ems-ficha-reproducir" aria-label="Reproducir esta nota">▶</button>`
-      }
-      fichasEl.appendChild(ficha)
-    })
-
-    fichasEl.querySelectorAll('.ems-ficha-reproducir').forEach((boton, i) => {
-      boton.addEventListener('click', () => {
-        const pulso = ronda.secuencia[ordenActual[i]]
-        tono({ frecuencia: NOTAS[pulso.carril].frecuencia, duracion: DURACION_NOTA })
-      })
-    })
-    fichasEl.querySelectorAll('[data-asignar]').forEach((boton) => {
-      boton.addEventListener('click', (e) => {
-        const ficha = boton.closest('.ems-ficha')
-        const posicion = Number(ficha.dataset.posicion)
-        const pulso = ronda.secuencia[ordenActual[posicion]]
-        pulso.carrilAsignado = Number(boton.dataset.asignar)
-        dibujarFichasAccesibles()
-      })
-    })
-    fichasEl.querySelectorAll('.ems-ficha').forEach((ficha) => {
-      ficha.addEventListener('keydown', (e) => {
-        const posicion = Number(ficha.dataset.posicion)
-        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-          e.preventDefault()
-          const destino = posicion + (e.key === 'ArrowRight' ? 1 : -1)
-          if (destino < 0 || destino >= ordenActual.length) return
-          ;[ordenActual[posicion], ordenActual[destino]] = [ordenActual[destino], ordenActual[posicion]]
-          focoFicha = destino
-          dibujarFichasAccesibles()
-          fichasEl.children[destino]?.focus()
-        }
-      })
-    })
-  }
-
-  function verificarOrdenAccesible() {
-    let fallos = 0
-    ordenActual.forEach((indiceOriginal, posicion) => {
-      const pulso = ronda.secuencia[indiceOriginal]
-      const carrilElegido = pulso.oculto ? pulso.carrilAsignado : pulso.carril
-      const ordenCorrecto = posicion === indiceOriginal
-      const carrilCorrecto = carrilElegido === pulso.carril
-      pulso.resuelto = true
-      pulso.acierto = ordenCorrecto && carrilCorrecto
-      if (!pulso.acierto) fallos += 1
-      else desviacionesAciertoMs.push(0) // sin línea de tiempo: cuenta como precisión perfecta
-    })
-    fallosPorRonda[rondaActual - 1] = fallos
-    finalizarRonda()
-  }
-
-  // ══════════════════════════════════════════════════════════════════════
-  //  Orquestación de fases (común a ambos modos)
-  // ══════════════════════════════════════════════════════════════════════
   function iniciarRonda() {
-    ronda = generarRonda(azar, opciones.dificultad, rondaActual)
-    ronda.secuencia.forEach((p) => { p.carrilAsignado = null })
-    fallosPorRonda[rondaActual - 1] = 0
-    totalPulsosPorRonda[rondaActual - 1] = ronda.secuencia.length
-    indiceSiguientePulso = 0
-    pulsosVisuales = []
-    actualizarHud()
-
-    if (opciones.modoAccesible) {
-      ordenActual = ronda.secuencia.map((_, i) => i)
-      // Se baraja para presentar las fichas desordenadas.
-      for (let i = ordenActual.length - 1; i > 0; i--) {
-        const j = Math.floor(azar() * (i + 1))
-        ;[ordenActual[i], ordenActual[j]] = [ordenActual[j], ordenActual[i]]
-      }
-      focoFicha = 0
-      dibujarFichasAccesibles()
-      faseActual = 'entre-rondas' // sin presión de tiempo: el jugador arma cuando quiera
-    } else {
-      faseActual = 'escucha'
-      tiempoFaseMs = 0
+    quitarManita()
+    ronda = generarRonda(azar, secuenciaRondas[indiceRonda])
+    construirColumnasDOM()
+    tiempoInactividad = 0
+    if (indiceRonda === 0) {
+      // La primera pasada siempre señala la respuesta desde el principio —
+      // así se enseña la regla completa sin decir una palabra.
+      mostrarManita(ronda.posicionFina, { persistente: true })
     }
   }
 
   function finalizarRonda() {
-    actualizarHud()
-    if (rondaActual >= RONDAS_POR_PARTIDA) {
+    quitarManita()
+    if (indiceRonda >= secuenciaRondas.length - 1) {
       finalizarPartida()
     } else {
-      rondaActual += 1
-      setTimeout(iniciarRonda, opciones.modoAccesible ? 0 : 900)
+      indiceRonda += 1
+      setTimeout(iniciarRonda, 700)
     }
   }
 
   function finalizarPartida() {
-    const totalFallos = fallosPorRonda.reduce((a, b) => a + b, 0)
-    const totalPulsos = totalPulsosPorRonda.reduce((a, b) => a + b, 0)
-    const aciertos = desviacionesAciertoMs.length
-    const precisos = desviacionesAciertoMs.filter((d) => d <= VENTANA_PRECISION_MS).length
-    const porcentajePrecision = aciertos > 0 ? precisos / aciertos : 0
-
-    // Fallo catastrófico: si se perdió más de la mitad de la señal, la
-    // misión no se considera superada (evento 'fallada' del contrato).
-    if (totalFallos > totalPulsos / 2) {
-      emitir('fallada', 'Se perdió más de la mitad de la señal entre el ruido joviano')
-      return
-    }
-
     const { estrellas } = evaluarEstrellas({
-      metricas: { totalFallos, porcentajePrecision },
+      metricas: { fallosReales },
       umbrales: [
-        { estrellas: 1, descripcion: 'Completar la secuencia', condicion: (m) => true },
-        { estrellas: 2, descripcion: 'A lo sumo 1 fallo', condicion: (m) => m.totalFallos <= 1 },
-        { estrellas: 3, descripcion: '0 fallos y ≥80% de golpes precisos', condicion: (m) => m.totalFallos === 0 && m.porcentajePrecision >= PRECISION_3_ESTRELLAS },
+        { estrellas: 1, descripcion: 'Encontrarlo', condicion: () => true },
+        { estrellas: 2, descripcion: 'Con pocos intentos de más', condicion: (m) => m.fallosReales <= 2 },
+        { estrellas: 3, descripcion: 'A la primera en las dos pasadas reales', condicion: (m) => m.fallosReales === 0 },
       ],
     })
-
-    emitir('superada', { estrellas, totalFallos, porcentajePrecision })
+    emitir('superada', { estrellas, fallosReales })
   }
 
-  // -- reproducción de la fase de escucha, pilotada por el bucle compartido --
   function cuadro(dt) {
-    if (pausado) return
-    if (faseActual === 'escucha' || faseActual === 'retransmision') tiempoFaseMs += dt * 1000
-    emitir('progreso', Math.min(1, (rondaActual - 1 + Math.min(1, tiempoFaseMs / (ronda?.duracionMs || 1))) / RONDAS_POR_PARTIDA))
-
-    if (flashFallo > 0) flashFallo = Math.max(0, flashFallo - dt * 4)
-
-    if (faseActual === 'escucha') {
-      while (indiceSiguientePulso < ronda.secuencia.length && ronda.secuencia[indiceSiguientePulso].t <= tiempoFaseMs) {
-        const p = ronda.secuencia[indiceSiguientePulso]
-        if (!p.oculto) {
-          tono({ frecuencia: NOTAS[p.carril].frecuencia, duracion: DURACION_NOTA, tipo: 'sine', ganancia: 0.22 })
-          pulsosVisuales.push({ carril: p.carril, tiempoInicio: tiempoFaseMs })
-        }
-        indiceSiguientePulso += 1
+    if (pausado || destruido || !ronda) return
+    if (!ronda.resuelto) {
+      tiempoInactividad += dt
+      if (tiempoInactividad >= SEGUNDOS_PISTA_AUTOMATICA) {
+        tiempoInactividad = 0
+        resaltarPistaColumna()
       }
-      dibujarOsciloscopio(tiempoFaseMs)
-      if (tiempoFaseMs >= ronda.duracionMs) {
-        faseActual = 'retransmision'
-        tiempoFaseMs = 0
-        indiceSiguientePulso = 0
-        pulsosVisuales = []
-      }
-    } else if (faseActual === 'retransmision') {
-      dibujarOsciloscopio(tiempoFaseMs)
-      dibujarHielo()
-      const progresoBarrido = Math.min(1, tiempoFaseMs / ronda.duracionMs)
-      if (lineaTiempo) lineaTiempo.style.transform = `translateX(${progresoBarrido * canvasOsciloscopio.clientWidth}px)`
-
-      if (tiempoFaseMs >= ronda.duracionMs) {
-        // Cualquier pulso no resuelto al terminar el barrido cuenta como fallo.
-        for (const p of ronda.secuencia) {
-          if (!p.resuelto) {
-            p.resuelto = true
-            p.acierto = false
-            fallosPorRonda[rondaActual - 1] += 1
-          }
-        }
-        dibujarHielo()
-        mostrarDatoRonda()
-        faseActual = 'entre-rondas'
-        setTimeout(finalizarRonda, 1400)
-      }
-    } else {
-      dibujarHielo()
     }
   }
 
-  function mostrarDatoRonda() {
-    const dato = raiz.querySelector('.ems-dato-ronda')
-    if (dato) {
-      dato.textContent = DATOS_HIELO[(rondaActual - 1) % DATOS_HIELO.length]
-      dato.classList.add('ems-dato-ronda--visible')
+  columnasEl.addEventListener('click', (e) => {
+    const boton = e.target.closest('.ees-columna')
+    if (boton) manejarClicColumna(Number(boton.dataset.i))
+  })
+
+  entrada = crearEntrada(raiz)
+  quitarTeclado = entrada.on('tecla-abajo', ({ tecla, original }) => {
+    const activo = document.activeElement
+    if (!activo?.classList?.contains('ees-columna')) return
+    const i = Number(activo.dataset.i)
+    if (tecla === ' ' || tecla === 'Enter') {
+      original?.preventDefault?.()
+      manejarClicColumna(i)
+      return
     }
+    if (tecla !== 'ArrowLeft' && tecla !== 'ArrowRight') return
+    original?.preventDefault?.()
+    const destino = i + (tecla === 'ArrowRight' ? 1 : -1)
+    const elDestino = elementosColumna[destino]
+    if (!elDestino) return
+    activo.tabIndex = -1
+    elDestino.tabIndex = 0
+    elDestino.focus()
+    anunciar(`Columna ${destino + 1}, grosor de hielo ${nivelGrosor(ronda.alturas[destino])} de 10`)
+  })
+
+  const ayuda = crearAyuda(raiz, {
+    id: 'europa',
+    pasos: [
+      { texto: 'Tocá la columna donde el hielo es más fino.', dibujo: 'ees-comparar' },
+      { texto: 'La más fina es la más cortita: ahí el océano está más cerca de la superficie.', dibujo: 'ees-oceano' },
+      { texto: 'Encontrala en cada pasada del radar.', dibujo: 'meta' },
+    ],
+    alAbrir: () => { pausado = true },
+    alCerrar: () => { pausado = false },
+    demostrar: () => demostrar(),
+    siguientePista: () => resaltarPistaColumna(),
+  })
+
+  function demostrar() {
+    // Solo una vista previa: nunca llama al manejador real, así que no hay
+    // forma de que "ver un ejemplo" resuelva la ronda de verdad.
+    pausado = true
+    const i = ronda.posicionFina
+    mostrarManita(i, { persistente: true })
+    setTimeout(() => {
+      if (destruido) return
+      const el = elementosColumna[i]
+      el?.classList.add('ees-columna--pulso')
+      tono({ frecuencia: 520, duracion: .18, tipo: 'triangle', ganancia: .14 })
+      setTimeout(() => {
+        if (destruido) return
+        el?.classList.remove('ees-columna--pulso')
+        quitarManita()
+        pausado = false
+      }, 1000)
+    }, 900)
   }
 
-  // ── contrato ──────────────────────────────────────────────────────────
   return {
     iniciar() {
-      if (opciones.modoAccesible) montarModoAccesible()
-      else montarModoEstandar()
       iniciarRonda()
       quitarSuscripcion = suscribir(cuadro)
     },
@@ -571,8 +318,9 @@ export function crearMision(contenedor, opciones) {
       if (destruido) return
       destruido = true
       quitarSuscripcion?.()
+      quitarTeclado?.()
       entrada?.destruir()
-      quitarLimpiezaTeclado?.()
+      ayuda.destruir()
       estilo.remove()
       contenedor.innerHTML = ''
       escuchas.clear()
@@ -585,171 +333,84 @@ export function crearMision(contenedor, opciones) {
   }
 }
 
-// ── Plantillas de DOM ─────────────────────────────────────────────────────
-function plantillaEstandar() {
-  return `
-    <div class="ems-zona-izquierda">
-      <canvas class="ems-osciloscopio"></canvas>
-      <div class="ems-linea-tiempo"></div>
-      <div class="ems-carriles">
-        ${NOTAS.map((n, i) => `
-          <button type="button" class="ems-carril" data-carril="${i}" aria-label="Carril ${n.nombre} (tecla ${TECLAS_CARRIL[i]} o ${TECLAS_CARRIL_ALT[i].toUpperCase()})">
-            <span>${n.nombre}</span>
-          </button>`).join('')}
-      </div>
-    </div>
-    <div class="ems-zona-derecha">
-      <canvas class="ems-hielo"></canvas>
-      <p class="ems-dato-ronda" aria-live="polite"></p>
-    </div>
-    <p class="ems-hud" aria-live="polite"></p>
-  `
-}
-
-function plantillaAccesible() {
-  return `
-    <div class="ems-zona-accesible">
-      <p class="ems-instrucciones">Ordená las fichas en la secuencia correcta. Para las fichas con «?», elegí el carril que corresponde por el patrón. Usá ← → para mover la ficha enfocada.</p>
-      <div class="ems-fichas" role="list" aria-label="Secuencia de pulsos, desordenada"></div>
-      <button type="button" class="ems-boton-verificar" data-accion="verificar-orden">VERIFICAR</button>
-    </div>
-    <div class="ems-zona-derecha">
-      <canvas class="ems-hielo"></canvas>
-      <p class="ems-dato-ronda" aria-live="polite"></p>
-    </div>
-    <p class="ems-hud" aria-live="polite"></p>
-  `
-}
-
-// ── CSS del juego (inyectado y removido junto con el contenedor) ────────
 const CSS_JUEGO = `
-.ems-raiz {
-  display: grid;
-  grid-template-columns: 1fr;
+.ees-raiz {
+  display: flex;
+  flex-direction: column;
   gap: var(--e-4, 1rem);
   width: 100%;
   height: 100%;
   color: #eafffb;
   font-family: inherit;
 }
-@media (min-width: 720px) {
-  .ems-raiz { grid-template-columns: 7fr 3fr; grid-template-rows: 1fr auto; }
-  .ems-zona-izquierda, .ems-zona-accesible { grid-column: 1; grid-row: 1; }
-  .ems-zona-derecha { grid-column: 2; grid-row: 1; }
-  .ems-hud { grid-column: 1 / -1; grid-row: 2; }
-}
-.ems-zona-izquierda, .ems-zona-accesible {
-  position: relative;
+.ees-columnas {
+  flex: 1;
   display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: rgba(10, 20, 24, .55);
-  border-radius: .75rem;
-  padding: var(--e-3, .75rem);
-  overflow: hidden;
-}
-.ems-osciloscopio { flex: 1; width: 100%; min-height: 120px; }
-.ems-linea-tiempo {
-  position: absolute;
-  top: var(--e-3, .75rem);
-  bottom: calc(56px + var(--e-3, .75rem) * 2);
-  left: var(--e-3, .75rem);
-  width: 2px;
-  background: rgba(255,255,255,.6);
-  box-shadow: 0 0 8px rgba(255,255,255,.6);
-  pointer-events: none;
-  will-change: transform;
-}
-.ems-carriles {
-  display: grid;
-  grid-auto-flow: column;
+  align-items: flex-end;
   gap: var(--e-2, .5rem);
-  margin-top: var(--e-3, .75rem);
-}
-.ems-carril {
-  min-height: 56px;
-  border-radius: .5rem;
-  border: 1px solid rgba(95,217,196,.3);
-  background: rgba(95,217,196,.08);
-  color: #eafffb;
-  font-size: var(--hud-label, .75rem);
-  cursor: pointer;
-  transition: background .15s ease, border-color .15s ease;
-}
-.ems-carril:focus-visible { outline: 2px solid #5FD9C4; outline-offset: 2px; }
-.ems-carril--flash-ok { background: rgba(95,217,196,.55); border-color: #5FD9C4; }
-.ems-carril--flash-fallo { background: rgba(255,143,163,.4); border-color: #FF8FA3; }
-
-.ems-zona-derecha {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: rgba(10, 20, 24, .4);
-  border-radius: .75rem;
+  min-height: clamp(160px, 32vh, 240px);
   padding: var(--e-3, .75rem);
-  min-height: 160px;
+  background: linear-gradient(180deg, rgba(10,20,24,.35), rgba(6,30,46,.7));
+  border-radius: var(--e-3, .75rem);
 }
-.ems-hielo { flex: 1; width: 100%; border-radius: .5rem; }
-.ems-dato-ronda {
-  margin: var(--e-2, .5rem) 0 0;
-  font-size: var(--hud-label, .75rem);
-  color: rgba(255,255,255,.7);
-  text-align: center;
-  opacity: 0;
-  transition: opacity .4s ease;
-}
-.ems-dato-ronda--visible { opacity: 1; }
-
-.ems-hud {
-  text-align: center;
-  font-size: var(--hud-label, .75rem);
-  color: rgba(255,255,255,.6);
-  letter-spacing: .06em;
-  margin: 0;
-}
-
-/* ── Modo accesible ──────────────────────────────────────────────────── */
-.ems-instrucciones { font-size: var(--hud-label, .75rem); color: rgba(255,255,255,.65); margin: 0 0 var(--e-3, .75rem); }
-.ems-fichas { display: flex; flex-wrap: wrap; gap: var(--e-2, .5rem); flex: 1; align-content: flex-start; }
-.ems-ficha {
-  min-width: 72px;
-  min-height: 72px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--e-1, .25rem);
-  padding: var(--e-2, .5rem);
-  border-radius: .5rem;
-  border: 1px solid rgba(95,217,196,.35);
-  background: rgba(95,217,196,.1);
-}
-.ems-ficha:focus-visible { outline: 2px solid #5FD9C4; outline-offset: 2px; }
-.ems-ficha-etiqueta { font-size: 1.1rem; font-weight: 700; }
-.ems-ficha-reproducir, .ems-ficha-selector button {
-  min-height: 44px;
-  min-width: 44px;
-  border-radius: .35rem;
-  border: 1px solid rgba(255,255,255,.15);
-  background: transparent;
-  color: #eafffb;
+.ees-columna {
+  position: relative;
+  flex: 1;
+  min-width: 32px;
+  height: 100%;
+  border: none;
+  border-radius: .4rem;
+  background: rgba(8, 40, 58, .8);
   cursor: pointer;
-  font-size: .7rem;
+  overflow: visible;
+  padding: 0;
 }
-.ems-ficha-selector { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; }
-.ems-ficha-selector button[aria-pressed="true"] { border-color: #5FD9C4; background: rgba(95,217,196,.3); }
-.ems-boton-verificar {
-  margin-top: var(--e-3, .75rem);
-  min-height: 44px;
-  border-radius: .5rem;
-  border: 1px solid #5FD9C4;
-  background: rgba(95,217,196,.16);
+.ees-columna:focus-visible { outline: 2px solid #5FD9C4; outline-offset: 3px; }
+.ees-hielo {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  border-radius: .4rem .4rem 0 0;
+  background: linear-gradient(180deg, #eafffb, #a8e6dd 70%, #5FD9C4);
+  transition: height .25s ease;
+}
+.ees-columna--fallo .ees-hielo { background: linear-gradient(180deg, #ffd7dd, #ff8fa3); }
+.ees-columna--fallo { animation: ees-sacudir .32s ease; }
+@keyframes ees-sacudir {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.ees-columna--pulso { animation: ees-pulso .9s ease; }
+.ees-columna--resuelta .ees-hielo { background: linear-gradient(180deg, #fff7e0, #ffe6a8, #F5C84C); }
+@keyframes ees-pulso {
+  0% { box-shadow: 0 0 0 0 rgba(95,217,196,.6); }
+  60% { box-shadow: 0 0 0 18px rgba(95,217,196,0); }
+  100% { box-shadow: 0 0 0 0 rgba(95,217,196,0); }
+}
+.ees-manita-slot {
+  position: absolute;
+  top: 0; left: 50%;
+  width: 0; height: 0;
+}
+.ees-manita {
+  position: absolute;
+  transform: translate(-50%, -110%);
+  width: 52px;
+  height: 52px;
   color: #fff;
-  cursor: pointer;
-  align-self: flex-start;
+  pointer-events: none;
+  animation: ees-manita-tap 1s ease-in-out infinite;
+  z-index: 3;
 }
-
+@keyframes ees-manita-tap {
+  0%, 100% { transform: translate(-50%, -110%); }
+  50% { transform: translate(-50%, -85%); }
+}
+.ees-anuncio {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0);
+}
 @media (prefers-reduced-motion: reduce) {
-  .ems-carril, .ems-dato-ronda { transition: none; }
+  .ees-columna--fallo, .ees-columna--pulso, .ees-manita { animation: none !important; }
+  .ees-hielo { transition: none; }
 }
 `

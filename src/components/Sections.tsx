@@ -1274,7 +1274,7 @@ const CHAIN_MSGS = [
 ]
 
 const GAME_META: { type: MissionGameType; label: string }[] = [
-  { type: 'sequence', label: 'Secuencia de Señales' },
+  { type: 'sequence', label: 'Sondeo de Hielo'       },
   { type: 'zone',     label: 'Zona de Captura'      },
   { type: 'order',    label: 'Orden de Vuelo'        },
   { type: 'mirrors',  label: 'Alinear Espejos'       },
@@ -1291,8 +1291,9 @@ const MISSION_DOT_COLORS: Record<string, string> = {
 // (public/misiones). Se amplía a medida que se migran más juegos; el resto
 // sigue con el placeholder inline de abajo hasta que estén listos.
 const MOTOR_MISION_IDS: Record<number, string> = {
-  0: 'europa', // Europa Clipper
-  3: 'webb',   // James Webb
+  0: 'europa',    // Europa Clipper
+  2: 'dragonfly', // Dragonfly
+  3: 'webb',      // James Webb
 }
 
 /* ─── Game 1: Secuencia de Señales (Europa Clipper) ───────────────────────── */
