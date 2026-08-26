@@ -1,42 +1,62 @@
 // mision-webb-espejos.js — «Alinear Espejos» (James Webb)
-// El espejo primario del Webb son 18 segmentos hexagonales independientes,
-// cada uno movido por motores de precisión nanométrica hasta que las 18
-// imágenes desenfocadas del mismo objeto se funden en una sola. Este juego
-// es esa operación como puzzle de deducción espacial: pulsar un segmento
-// cambia su fase y la de sus vecinos — hay que llevar TODOS los segmentos
-// a la misma fase, sin importar cuál. Sin reloj: es un problema de lógica,
-// no de reflejos.
+// Regla única: todos los espejos tienen que quedar del mismo color. Cuando
+// tocás uno, sus vecinos también cambian. Se resuelve pensando (probando
+// combinaciones) o simplemente mirando la galaxia de al lado: se enfoca
+// sola mientras más parejos quedan los espejos, así que también se puede
+// jugar a ojo, sin entender nada de lógica.
 import { suscribir } from '../nucleo/bucle-animacion.js'
 import { crearEntrada } from '../nucleo/entrada-unificada.js'
 import { tono, barrido } from '../nucleo/audio-mision.js'
 import { evaluarEstrellas } from '../nucleo/evaluador-estrellas.js'
+import { crearAyuda, registrarDibujo } from '../nucleo/ayuda-paso-a-paso.js'
+
+// Dibujos específicos de este juego para el panel de ayuda — se suman al
+// catálogo compartido (arrastrar/tocar/esperar/meta viven en el núcleo).
+registrarDibujo('mwe-vecinos', () => {
+  const centro = { x: 100, y: 60 }
+  const radio = 30
+  let satelites = ''
+  for (let i = 0; i < 6; i++) {
+    const angulo = (Math.PI / 3) * i
+    const x = centro.x + Math.cos(angulo) * radio
+    const y = centro.y + Math.sin(angulo) * radio
+    satelites += `<line x1="${centro.x}" y1="${centro.y}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-width="2" opacity=".35"/>`
+    satelites += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="currentColor" opacity=".85"/>`
+  }
+  return `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">${satelites}<circle cx="${centro.x}" cy="${centro.y}" r="12" fill="currentColor"/></svg>`
+})
+registrarDibujo('mwe-galaxia-clara', () => `
+  <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="50" cy="60" r="26" fill="currentColor" opacity=".15"/>
+    <circle cx="50" cy="60" r="18" fill="currentColor" opacity=".2"/>
+    <circle cx="50" cy="60" r="10" fill="currentColor" opacity=".3"/>
+    <path d="M84 60 H124" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity=".5"/>
+    <path d="M112 50 L126 60 L112 70" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/>
+    <path d="M155 44 L162 58 L178 60 L166 70 L169 86 L155 78 L141 86 L144 70 L132 60 L148 58 Z" fill="currentColor"/>
+  </svg>`)
 
 export const meta = {
   titulo: 'James Webb · Alinear Espejos',
   acento: '#9B7FE8',
-  objetivo: 'Llevá todos los segmentos del espejo a la misma fase para fusionar las imágenes en una sola.',
-  datoInicial: 'El espejo primario del James Webb está hecho de 18 segmentos hexagonales de berilio bañados en oro, cada uno ajustable con motores de precisión nanométrica.',
-  datoCierre: 'Alinear los 18 segmentos reales del Webb tomó unos tres meses de ajustes microscópicos, hasta que las 18 imágenes borrosas de una misma estrella se fusionaron en un solo punto nítido.',
+  objetivo: 'Dejá todos los espejos del mismo color. Al tocar uno, sus vecinos cambian con él.',
+  datoInicial: 'El telescopio James Webb ve el universo con 18 espejos dorados que tienen que quedar perfectamente alineados.',
+  datoCierre: 'El telescopio James Webb tiene 18 espejos hexagonales. Alinearlos tomó tres meses. Hasta que quedaron perfectos, veía cada estrella 18 veces.',
 }
 
-// ── Geometría hexagonal axial (orientación "flat-top") ───────────────────
-const DIRECCIONES = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
-// Mapeo físico Q W E / A S D → las 6 direcciones hexagonales, en la misma
-// disposición espacial que las teclas ocupan en el teclado (Q arriba-izq,
-// W arriba, E arriba-der, A abajo-izq, S abajo, D abajo-der).
-const DIRECCION_TECLA = { q: [-1, 0], w: [0, -1], e: [1, -1], a: [-1, 1], s: [0, 1], d: [1, 0] }
+// ── Colores del panal (nunca más de 4) ───────────────────────────────────
+const COLORES = ['#F5C84C', '#9B7FE8', '#5FD9C4', '#FF6F91']
+const NOMBRES_COLOR = ['dorado', 'violeta', 'turquesa', 'rosa']
 
 const PARAMETROS_DIFICULTAD = {
-  1: { incluirCentro: true, base: 3, k: 4, bloqueados: 0 },
-  2: { incluirCentro: false, base: 4, k: 6, bloqueados: 0 },
-  3: { incluirCentro: false, base: 6, k: 11, bloqueados: 2 },
+  1: { incluirCentro: true, colores: 2, kMin: 3, kMax: 4 },
+  2: { incluirCentro: false, colores: 3, kMin: 5, kMax: 6 },
+  3: { incluirCentro: false, colores: 4, kMin: 8, kMax: 9 },
 }
 
-function mod(n, m) {
-  return ((n % m) + m) % m
-}
+const SEGUNDOS_PISTA_AUTOMATICA = 45
 
-// ── PRNG determinista (mulberry32) — misma semilla, mismo tablero ───────
+function mod(n, m) { return ((n % m) + m) % m }
+
 function crearAleatorio(semilla) {
   let estado = semilla >>> 0
   return function () {
@@ -47,8 +67,9 @@ function crearAleatorio(semilla) {
   }
 }
 
-// Anillo hexagonal a distancia `radio` del centro — algoritmo estándar:
-// caminar 6 lados de `radio` pasos cada uno, arrancando en la dirección 4.
+// ── Geometría hexagonal axial (igual para 7 y 18 hexágonos) ─────────────
+const DIRECCIONES = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
+
 function anilloHex(radio) {
   if (radio === 0) return [{ q: 0, r: 0 }]
   const resultados = []
@@ -64,9 +85,8 @@ function anilloHex(radio) {
   return resultados
 }
 
-function construirTablero(dificultad) {
-  const params = PARAMETROS_DIFICULTAD[dificultad]
-  const crudos = params.incluirCentro ? [{ q: 0, r: 0 }, ...anilloHex(1)] : [...anilloHex(1), ...anilloHex(2)]
+function construirTablero(incluirCentro) {
+  const crudos = incluirCentro ? [{ q: 0, r: 0 }, ...anilloHex(1)] : [...anilloHex(1), ...anilloHex(2)]
   const idDe = (h) => `${h.q},${h.r}`
   const hexes = crudos.map((h) => ({ ...h, id: idDe(h) }))
   const idsValidos = new Set(hexes.map((h) => h.id))
@@ -79,13 +99,12 @@ function construirTablero(dificultad) {
     }
     vecinos.set(h.id, propios)
   }
-  return { hexes, vecinos, base: params.base, k: params.k, bloqueadosCount: params.bloqueados }
+  return { hexes, vecinos }
 }
 
-// Convierte coordenadas axiales a posición porcentual dentro de un
-// contenedor con aspect-ratio ya calculado — así el panal se dibuja con
-// DOM absolutamente posicionado (nada de canvas para los hexágonos, solo
-// para el sensor), y escala con clamp()/aspect-ratio sin JS de resize.
+// Convierte coordenadas axiales a posición porcentual — el panal se dibuja
+// con botones posicionados en % dentro de un contenedor con aspect-ratio,
+// sin canvas ni JS de resize.
 function calcularLayoutHex(hexes) {
   const tam = 1
   const puntos = hexes.map((h) => ({
@@ -113,6 +132,118 @@ function calcularLayoutHex(hexes) {
   return { posiciones, aspecto: rangoX / rangoY, anchoHexPct }
 }
 
+// ── Secuencia de rondas: empieza trivial y crece sola ────────────────────
+// Nunca se generan estados al azar (podrían ser irresolubles): siempre se
+// parte del estado uniforme (ya "resuelto") y se aplican K pulsos hacia
+// atrás — eso garantiza que existe un camino de vuelta.
+function generarSecuenciaRondas(dificultad) {
+  const d = PARAMETROS_DIFICULTAD[dificultad]
+  return [
+    { incluirCentro: true, colores: 2, k: 1 },
+    { incluirCentro: true, colores: 2, k: 2 },
+    { incluirCentro: d.incluirCentro, colores: d.colores, k: d.kMin },
+    { incluirCentro: d.incluirCentro, colores: d.colores, k: d.kMax },
+  ]
+}
+
+function generarRonda(azar, config) {
+  const tablero = construirTablero(config.incluirCentro)
+  const fases = new Map(tablero.hexes.map((h) => [h.id, 0]))
+  const contadorClicks = new Map(tablero.hexes.map((h) => [h.id, 0]))
+
+  function pulsar(id) {
+    fases.set(id, mod(fases.get(id) + 1, config.colores))
+    for (const vecino of tablero.vecinos.get(id)) {
+      fases.set(vecino, mod(fases.get(vecino) + 1, config.colores))
+    }
+  }
+
+  // En el panal de 7 (centro + anillo) el centro es vecino de TODOS los
+  // demás — si el sorteo lo eligiera, un solo click podría "resolver" el
+  // panal por accidente (todos cambian igual). Se excluye como objetivo de
+  // mezclado para que K pulsos sea siempre K pulsos de verdad.
+  const idsParaMezclar = tablero.hexes.map((h) => h.id).filter((id) => id !== '0,0' || !config.incluirCentro)
+  for (let i = 0; i < config.k; i++) {
+    const id = idsParaMezclar[Math.floor(azar() * idsParaMezclar.length)]
+    pulsar(id)
+    contadorClicks.set(id, contadorClicks.get(id) + 1)
+  }
+
+  return { tablero, fases, contadorClicks, colores: config.colores, optimo: config.k, pulsar }
+}
+
+function calcularCorreccion(ronda) {
+  const correccion = new Map()
+  for (const h of ronda.tablero.hexes) {
+    correccion.set(h.id, mod(ronda.colores - mod(ronda.contadorClicks.get(h.id), ronda.colores), ronda.colores))
+  }
+  return correccion
+}
+
+function estaResuelta(ronda) {
+  const valores = [...ronda.fases.values()]
+  return valores.every((v) => v === valores[0])
+}
+
+function calcularConvergencia(ronda) {
+  let sumaCos = 0, sumaSin = 0
+  for (const v of ronda.fases.values()) {
+    const angulo = (2 * Math.PI * v) / ronda.colores
+    sumaCos += Math.cos(angulo)
+    sumaSin += Math.sin(angulo)
+  }
+  const n = ronda.fases.size
+  return Math.sqrt(sumaCos * sumaCos + sumaSin * sumaSin) / n
+}
+
+// ── Galaxia procedural (SVG, sin imágenes externas) ──────────────────────
+// Se dibuja UNA vez por partida (misma semilla → misma galaxia) y después
+// no vuelve a redibujarse: lo único que cambia es el blur según la
+// convergencia, así que no hace falta rehacer el SVG en cada click.
+function generarGalaxiaSVG(azar) {
+  const estrellas = []
+  for (let i = 0; i < 70; i++) {
+    const angulo = azar() * Math.PI * 2
+    const radio = Math.pow(azar(), 0.5) * 140
+    estrellas.push({
+      x: 150 + Math.cos(angulo) * radio,
+      y: 150 + Math.sin(angulo) * radio,
+      r: azar() * 1.3 + .3,
+      o: azar() * .6 + .25,
+    })
+  }
+  let brazos = ''
+  for (let brazo = 0; brazo < 2; brazo++) {
+    const offset = brazo * Math.PI
+    let puntos = ''
+    for (let t = 0; t < 60; t++) {
+      const progreso = t / 60
+      const angulo = offset + progreso * Math.PI * 2.4
+      const radio = 18 + progreso * 125
+      const x = 150 + Math.cos(angulo) * radio
+      const y = 150 + Math.sin(angulo) * radio
+      const r = 2.6 * (1 - progreso) + .4
+      brazos += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="#cdbcff" opacity="${(0.5 * (1 - progreso) + .08).toFixed(2)}"/>`
+    }
+  }
+  const estrellasSVG = estrellas.map((s) => `<circle cx="${s.x.toFixed(1)}" cy="${s.y.toFixed(1)}" r="${s.r.toFixed(2)}" fill="#fff" opacity="${s.o.toFixed(2)}"/>`).join('')
+  return `
+    <svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="mwe-nucleo" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#fff7e0"/>
+          <stop offset="35%" stop-color="#e8c9ff"/>
+          <stop offset="100%" stop-color="#e8c9ff" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect width="300" height="300" fill="#0a0714"/>
+      ${estrellasSVG}
+      ${brazos}
+      <circle cx="150" cy="150" r="46" fill="url(#mwe-nucleo)"/>
+      <circle cx="150" cy="150" r="10" fill="#fff7e0"/>
+    </svg>`
+}
+
 // ── Componente principal ─────────────────────────────────────────────────
 export function crearMision(contenedor, opciones) {
   const azar = crearAleatorio(opciones.semilla >>> 0 || Date.now())
@@ -123,76 +254,18 @@ export function crearMision(contenedor, opciones) {
 
   let destruido = false
   let pausado = false
-  let resuelto = false
   let quitarSuscripcion = null
   let entrada = null
   let quitarTeclado = null
 
-  const tablero = construirTablero(opciones.dificultad)
-  const layout = calcularLayoutHex(tablero.hexes)
-
-  // Nunca se generan estados al azar (podrían ser irresolubles): se parte
-  // del estado uniforme (todos en fase 0, que YA es una solución válida) y
-  // se aplican K pulsaciones aleatorias — eso garantiza que existe un
-  // camino de vuelta. Los bloqueados se eligen ANTES de mezclar y el
-  // mezclado nunca los usa directamente, así el puzzle queda garantizado
-  // resoluble usando solo los segmentos que el jugador puede pulsar.
-  const fases = new Map(tablero.hexes.map((h) => [h.id, 0]))
-  const contadorClicks = new Map(tablero.hexes.map((h) => [h.id, 0]))
-  const bloqueados = new Set()
-  {
-    const candidatos = tablero.hexes.map((h) => h.id)
-    for (let i = 0; i < tablero.bloqueadosCount; i++) {
-      const idx = Math.floor(azar() * candidatos.length)
-      bloqueados.add(candidatos.splice(idx, 1)[0])
-    }
-  }
-  const idsPulsables = tablero.hexes.map((h) => h.id).filter((id) => !bloqueados.has(id))
-
-  function aplicarPulsoBruto(id) {
-    fases.set(id, mod(fases.get(id) + 1, tablero.base))
-    for (const vecino of tablero.vecinos.get(id)) {
-      fases.set(vecino, mod(fases.get(vecino) + 1, tablero.base))
-    }
-  }
-
-  for (let i = 0; i < tablero.k; i++) {
-    const id = idsPulsables[Math.floor(azar() * idsPulsables.length)]
-    aplicarPulsoBruto(id)
-    contadorClicks.set(id, contadorClicks.get(id) + 1)
-  }
-
-  // "Óptimo conocido": cuántas pulsaciones adicionales, una por segmento,
-  // devuelven el tablero a fase 0 exacta desde el estado recién mezclado.
-  // Es la base contra la que se puntúan las estrellas del jugador.
-  function calcularCorreccion() {
-    const correccion = new Map()
-    for (const h of tablero.hexes) correccion.set(h.id, mod(tablero.base - mod(contadorClicks.get(h.id), tablero.base), tablero.base))
-    return correccion
-  }
-  const optimo = [...calcularCorreccion().values()].reduce((a, b) => a + b, 0)
-
-  let pulsacionesJugador = 0
-  const historialClicks = []
+  const secuenciaRondas = generarSecuenciaRondas(opciones.dificultad)
+  let indiceRonda = 0
+  let ronda = null
+  let historial = [] // pila de ids clickeados, para DESHACER
+  let toquesJugador = 0
+  let optimoTotal = secuenciaRondas.reduce((a, c) => a + c.k, 0)
   let tiempoInactividad = 0
-  let convergenciaVisual = 0
-  let estrellasGalaxia = null
-
-  function estaTodoIgual() {
-    const valores = [...fases.values()]
-    return valores.every((v) => v === valores[0])
-  }
-
-  function calcularConvergencia() {
-    let sumaCos = 0, sumaSin = 0
-    for (const v of fases.values()) {
-      const angulo = (2 * Math.PI * v) / tablero.base
-      sumaCos += Math.cos(angulo)
-      sumaSin += Math.sin(angulo)
-    }
-    const n = fases.size
-    return Math.sqrt(sumaCos * sumaCos + sumaSin * sumaSin) / n
-  }
+  let manitaEl = null
 
   // -- construcción del DOM --
   const estilo = document.createElement('style')
@@ -201,51 +274,137 @@ export function crearMision(contenedor, opciones) {
 
   const raiz = document.createElement('div')
   raiz.className = 'mwe-raiz'
-  raiz.innerHTML = plantilla(tablero, layout, bloqueados, opciones.modoAccesible)
+  raiz.innerHTML = `
+    <div class="mwe-zona-panal">
+      <div class="mwe-panal-envoltorio">
+        <div class="mwe-panal" role="group" aria-label="Panal de espejos"></div>
+      </div>
+      <div class="mwe-controles">
+        <button type="button" class="mwe-boton-deshacer" data-accion="deshacer" disabled>↩ Deshacer</button>
+      </div>
+      <p class="mwe-anuncio" aria-live="polite"></p>
+    </div>
+    <div class="mwe-zona-galaxia">
+      <div class="mwe-galaxia">${generarGalaxiaSVG(crearAleatorio((opciones.semilla >>> 0 || 1) + 777))}</div>
+    </div>
+  `
   contenedor.appendChild(raiz)
 
   const panalEl = raiz.querySelector('.mwe-panal')
-  const elementosHex = new Map()
-  raiz.querySelectorAll('.mwe-hex').forEach((el) => elementosHex.set(el.dataset.id, el))
-  const primerHex = elementosHex.get(tablero.hexes[0].id)
-  if (primerHex) primerHex.tabIndex = 0
+  const galaxiaEl = raiz.querySelector('.mwe-galaxia')
+  const botonDeshacer = raiz.querySelector('[data-accion="deshacer"]')
+  const anuncioEl = raiz.querySelector('.mwe-anuncio')
 
-  let canvasSensor, ctxSensor
-  function redimensionarCanvas(canvas) {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    const r = canvas.getBoundingClientRect()
-    canvas.width = Math.max(1, Math.round(r.width * dpr))
-    canvas.height = Math.max(1, Math.round(r.height * dpr))
-    canvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0)
+  const elementosHex = new Map()
+
+  function anunciar(texto) {
+    if (opciones.modoAccesible) anuncioEl.textContent = texto
   }
 
-  function actualizarVisualHexes() {
-    for (const h of tablero.hexes) {
+  function construirPanalDOM() {
+    elementosHex.clear()
+    const layout = calcularLayoutHex(ronda.tablero.hexes)
+    const anchoMinimo = Math.ceil(4800 / layout.anchoHexPct)
+    panalEl.style.aspectRatio = String(layout.aspecto)
+    panalEl.style.minWidth = `${anchoMinimo}px`
+    panalEl.innerHTML = ronda.tablero.hexes.map((h) => {
+      const pos = layout.posiciones.get(h.id)
+      return `<button type="button" class="mwe-hex" data-id="${h.id}" tabindex="-1"
+        style="left:${pos.leftPct}%;top:${pos.topPct}%;width:${pos.anchoHexPct}%;height:${pos.altoHexPct}%"></button>`
+    }).join('')
+    panalEl.querySelectorAll('.mwe-hex').forEach((el) => elementosHex.set(el.dataset.id, el))
+    const primerHex = elementosHex.get(ronda.tablero.hexes[0].id)
+    if (primerHex) primerHex.tabIndex = 0
+  }
+
+  function pintarHexes() {
+    for (const h of ronda.tablero.hexes) {
       const el = elementosHex.get(h.id)
       if (!el) continue
-      const fase = fases.get(h.id)
-      el.style.setProperty('--mwe-anillo', String(fase / tablero.base))
-      el.style.setProperty('--mwe-brillo', String(0.22 + (fase / tablero.base) * 0.6))
-      const etiqueta = el.querySelector('.mwe-hex-fase')
-      if (etiqueta) etiqueta.textContent = String(fase)
+      const color = ronda.fases.get(h.id)
+      el.style.background = COLORES[color]
+      el.setAttribute('aria-label', `Espejo color ${NOMBRES_COLOR[color]}`)
     }
   }
 
-  function actualizarHud() {
-    const hud = raiz.querySelector('.mwe-hud')
-    if (hud) hud.textContent = `Pulsaciones: ${pulsacionesJugador}`
+  function quitarManita() {
+    manitaEl?.remove()
+    manitaEl = null
+  }
+
+  function mostrarManita(idHex, { persistente = false } = {}) {
+    quitarManita()
+    const el = elementosHex.get(idHex)
+    if (!el) return
+    manitaEl = document.createElement('div')
+    manitaEl.className = 'mwe-manita'
+    manitaEl.innerHTML = `
+      <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="30" cy="24" r="14" fill="currentColor" opacity=".25"/>
+        <circle cx="30" cy="24" r="7" fill="currentColor"/>
+      </svg>`
+    manitaEl.style.left = el.style.left
+    manitaEl.style.top = el.style.top
+    panalEl.appendChild(manitaEl)
+    if (!persistente) setTimeout(quitarManita, 2600)
+  }
+
+  function resaltarPistaHex() {
+    if (destruido || estaResuelta(ronda)) return
+    const correccion = calcularCorreccion(ronda)
+    const candidato = ronda.tablero.hexes.find((h) => correccion.get(h.id) > 0)
+    if (!candidato) return
+    mostrarManita(candidato.id)
+  }
+
+  function actualizarGalaxia() {
+    const convergencia = calcularConvergencia(ronda)
+    const desenfoque = (1 - convergencia) * 18
+    galaxiaEl.style.filter = `blur(${desenfoque}px)`
   }
 
   function actualizarBotonDeshacer() {
-    const boton = raiz.querySelector('[data-accion="deshacer"]')
-    if (boton) boton.disabled = historialClicks.length === 0
+    botonDeshacer.disabled = historial.length === 0
+  }
+
+  function manejarClicHex(id) {
+    if (destruido || pausado || estaResuelta(ronda)) return
+    quitarManita()
+    ronda.pulsar(id)
+    ronda.contadorClicks.set(id, ronda.contadorClicks.get(id) + 1)
+    historial.push(id)
+    toquesJugador += 1
+    tiempoInactividad = 0
+    ayuda?.marcarLogro()
+    animarOnda(id)
+    pintarHexes()
+    actualizarGalaxia()
+    actualizarBotonDeshacer()
+    anunciar(`Espejo ${NOMBRES_COLOR[ronda.fases.get(id)]}`)
+    tono({ frecuencia: 300 + ronda.fases.get(id) * 60, duracion: .09, tipo: 'sine', ganancia: .12 })
+    emitir('progreso', (indiceRonda + calcularConvergencia(ronda)) / secuenciaRondas.length)
+    if (estaResuelta(ronda)) {
+      setTimeout(finalizarRonda, 500)
+    }
+  }
+
+  function deshacer() {
+    if (historial.length === 0 || estaResuelta(ronda)) return
+    const id = historial.pop()
+    for (let i = 0; i < ronda.colores - 1; i++) ronda.pulsar(id)
+    ronda.contadorClicks.set(id, ronda.contadorClicks.get(id) - 1)
+    toquesJugador = Math.max(0, toquesJugador - 1)
+    tiempoInactividad = 0
+    pintarHexes()
+    actualizarGalaxia()
+    actualizarBotonDeshacer()
   }
 
   function animarOnda(idOrigen) {
     const origen = elementosHex.get(idOrigen)
     origen?.classList.add('mwe-hex--onda')
     setTimeout(() => origen?.classList.remove('mwe-hex--onda'), 240)
-    const vecinos = tablero.vecinos.get(idOrigen) || []
+    const vecinos = ronda.tablero.vecinos.get(idOrigen) || []
     vecinos.forEach((vId) => {
       const el = elementosHex.get(vId)
       if (!el) return
@@ -256,113 +415,58 @@ export function crearMision(contenedor, opciones) {
     })
   }
 
-  function manejarClicHex(id) {
-    if (destruido || pausado || resuelto || bloqueados.has(id)) return
-    aplicarPulsoBruto(id)
-    contadorClicks.set(id, contadorClicks.get(id) + 1)
-    pulsacionesJugador += 1
-    historialClicks.push(id)
-    tiempoInactividad = 0
-    animarOnda(id)
-    actualizarVisualHexes()
-    actualizarHud()
+  function iniciarRonda() {
+    quitarManita()
+    ronda = generarRonda(azar, secuenciaRondas[indiceRonda])
+    historial = []
+    construirPanalDOM()
+    pintarHexes()
+    actualizarGalaxia()
     actualizarBotonDeshacer()
-    tono({ frecuencia: 220 + fases.get(id) * 40, duracion: 0.08, tipo: 'sine', ganancia: 0.12 })
-    emitir('progreso', calcularConvergencia())
-    if (estaTodoIgual()) finalizar()
-  }
-
-  function deshacer() {
-    if (!opciones.modoAccesible || historialClicks.length === 0 || resuelto) return
-    const id = historialClicks.pop()
-    // Aplicar el mismo pulso (base-1) veces más equivale a restarle 1 mod
-    // base — inversa exacta sin necesitar una operación "resta" separada.
-    for (let i = 0; i < tablero.base - 1; i++) aplicarPulsoBruto(id)
-    contadorClicks.set(id, contadorClicks.get(id) - 1)
-    pulsacionesJugador = Math.max(0, pulsacionesJugador - 1)
     tiempoInactividad = 0
-    actualizarVisualHexes()
-    actualizarHud()
-    actualizarBotonDeshacer()
+    if (indiceRonda === 0) {
+      // La primera ronda siempre se resuelve en un solo toque: la manita
+      // señala el espejo correcto desde el principio, sin esperar a que se
+      // trabe — es la forma en que se enseña la regla completa sin decirla.
+      const correccion = calcularCorreccion(ronda)
+      const objetivo = ronda.tablero.hexes.find((h) => correccion.get(h.id) > 0)
+      if (objetivo) mostrarManita(objetivo.id, { persistente: true })
+    }
   }
 
-  function mostrarPista() {
-    const correccion = calcularCorreccion()
-    const candidato = tablero.hexes.find((h) => !bloqueados.has(h.id) && correccion.get(h.id) > 0)
-    if (!candidato) return
-    const el = elementosHex.get(candidato.id)
-    el?.classList.add('mwe-hex--pista')
-    setTimeout(() => el?.classList.remove('mwe-hex--pista'), 2200)
-    const texto = raiz.querySelector('.mwe-pista')
-    if (texto) texto.textContent = 'Pista: el segmento resaltado necesita otra pulsación.'
+  function finalizarRonda() {
+    quitarManita()
+    barrido({ desde: 500 + indiceRonda * 120, hasta: 900 + indiceRonda * 120, duracion: .5, tipo: 'sine', ganancia: .14 })
+    if (indiceRonda >= secuenciaRondas.length - 1) {
+      finalizarPartida()
+    } else {
+      indiceRonda += 1
+      setTimeout(iniciarRonda, 700)
+    }
   }
 
-  function finalizar() {
-    resuelto = true
-    barrido({ desde: 300, hasta: 900, duracion: 1.1, tipo: 'sine', ganancia: 0.16 })
+  function finalizarPartida() {
     const { estrellas } = evaluarEstrellas({
-      metricas: { pulsacionesJugador },
+      metricas: { toques: toquesJugador, optimo: optimoTotal },
       umbrales: [
-        { estrellas: 1, descripcion: 'Completar el alineado', condicion: () => true },
-        { estrellas: 2, descripcion: `${optimo + 6} pulsaciones o menos`, condicion: (m) => m.pulsacionesJugador <= optimo + 6 },
-        { estrellas: 3, descripcion: `${optimo + 2} pulsaciones o menos (óptimo + 2)`, condicion: (m) => m.pulsacionesJugador <= optimo + 2 },
+        { estrellas: 1, descripcion: 'Resolverlo', condicion: () => true },
+        { estrellas: 2, descripcion: 'En pocos toques', condicion: (m) => m.toques <= m.optimo + 8 },
+        { estrellas: 3, descripcion: 'Casi los mínimos', condicion: (m) => m.toques <= m.optimo + 3 },
       ],
     })
-    emitir('superada', { estrellas, pulsacionesJugador, optimo })
-  }
-
-  function dibujarGalaxia(w, h) {
-    if (!estrellasGalaxia) {
-      const az = crearAleatorio((opciones.semilla >>> 0 || 1) + 777)
-      estrellasGalaxia = Array.from({ length: 140 }, () => ({
-        x: az() * w, y: az() * h, r: az() * 1.4 + 0.3, brillo: az() * 0.6 + 0.3,
-      }))
-    }
-    ctxSensor.fillStyle = 'rgba(8,6,16,0.9)'
-    ctxSensor.fillRect(0, 0, w, h)
-    for (const s of estrellasGalaxia) {
-      ctxSensor.beginPath()
-      ctxSensor.arc(s.x, s.y, s.r, 0, Math.PI * 2)
-      ctxSensor.fillStyle = `rgba(200,190,255,${s.brillo})`
-      ctxSensor.fill()
-    }
-  }
-
-  function dibujarSensor() {
-    const w = canvasSensor.clientWidth
-    const h = canvasSensor.clientHeight
-    ctxSensor.clearRect(0, 0, w, h)
-    if (resuelto && convergenciaVisual > 0.98) {
-      dibujarGalaxia(w, h)
-      return
-    }
-    const cx = w / 2, cy = h / 2
-    for (const h2 of tablero.hexes) {
-      const pos = layout.posiciones.get(h2.id)
-      const bx = (pos.leftPct / 100) * w
-      const by = (pos.topPct / 100) * h
-      const x = bx + (cx - bx) * convergenciaVisual
-      const y = by + (cy - by) * convergenciaVisual
-      const fase = fases.get(h2.id)
-      const intensidad = 0.35 + (fase / tablero.base) * 0.65
-      ctxSensor.beginPath()
-      ctxSensor.arc(x, y, 3 + convergenciaVisual * 2, 0, Math.PI * 2)
-      ctxSensor.fillStyle = `rgba(155,127,232,${intensidad})`
-      ctxSensor.fill()
-    }
+    emitir('superada', { estrellas, toques: toquesJugador, optimo: optimoTotal })
   }
 
   function cuadro(dt) {
-    if (pausado) return
-    const objetivo = calcularConvergencia()
-    convergenciaVisual += (objetivo - convergenciaVisual) * Math.min(1, dt * 6)
-    dibujarSensor()
-
-    if (opciones.modoAccesible && !resuelto) {
+    if (pausado || destruido) return
+    // Corre en todas las rondas, incluida la primera: la manita inicial
+    // marca el camino más obvio, pero si el jugador toca otro espejo y se
+    // desorienta, no debe quedarse sin ayuda hasta la ronda siguiente.
+    if (!estaResuelta(ronda)) {
       tiempoInactividad += dt
-      if (tiempoInactividad >= 45) {
+      if (tiempoInactividad >= SEGUNDOS_PISTA_AUTOMATICA) {
         tiempoInactividad = 0
-        mostrarPista()
+        resaltarPistaHex()
       }
     }
   }
@@ -371,43 +475,123 @@ export function crearMision(contenedor, opciones) {
     const boton = e.target.closest('.mwe-hex')
     if (boton) manejarClicHex(boton.dataset.id)
   })
-  raiz.querySelector('[data-accion="deshacer"]')?.addEventListener('click', deshacer)
+  botonDeshacer.addEventListener('click', deshacer)
 
+  const DIRECCION_FLECHA = {
+    ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+    ArrowUp: [0, -1], ArrowDown: [0, 1],
+  }
   entrada = crearEntrada(raiz)
   quitarTeclado = entrada.on('tecla-abajo', ({ tecla, original }) => {
     const activo = document.activeElement
-    if (!activo || !activo.classList?.contains('mwe-hex')) return
-    // Activación explícita en vez de depender del comportamiento nativo del
-    // <button> con Espacio/Enter: algunos entornos de entrada sintética no
-    // disparan el "click" por defecto del navegador, y el contrato exige
-    // una ruta de teclado que funcione siempre, no solo cuando el navegador
-    // decide activarla.
     if (tecla === ' ' || tecla === 'Enter') {
-      original?.preventDefault?.()
-      manejarClicHex(activo.dataset.id)
+      if (activo?.classList?.contains('mwe-hex')) {
+        original?.preventDefault?.()
+        manejarClicHex(activo.dataset.id)
+      }
       return
     }
-    const dir = DIRECCION_TECLA[tecla]
-    if (!dir) return
-    const [q, r] = activo.dataset.id.split(',').map(Number)
-    const destino = elementosHex.get(`${q + dir[0]},${r + dir[1]}`)
+    const dir = DIRECCION_FLECHA[tecla]
+    if (!dir || !activo?.classList?.contains('mwe-hex')) return
+    original?.preventDefault?.()
+    // Se navega por dirección de PANTALLA (no por eje hexagonal fijo): entre
+    // los vecinos reales del hexágono enfocado, se elige el que mejor
+    // coincide con la flecha presionada. Así "arriba" siempre se siente
+    // como arriba, sin importar la orientación del panal.
+    const idsVecinos = ronda.tablero.vecinos.get(activo.dataset.id) || []
+    if (idsVecinos.length === 0) return
+    const layout = calcularLayoutHex(ronda.tablero.hexes)
+    const posActual = layout.posiciones.get(activo.dataset.id)
+    let mejor = null, mejorPuntaje = -Infinity
+    for (const id of idsVecinos) {
+      const pos = layout.posiciones.get(id)
+      const dx = pos.leftPct - posActual.leftPct
+      const dy = pos.topPct - posActual.topPct
+      const largo = Math.hypot(dx, dy) || 1
+      const puntaje = (dx / largo) * dir[0] + (dy / largo) * dir[1]
+      if (puntaje > mejorPuntaje) { mejorPuntaje = puntaje; mejor = id }
+    }
+    const destino = mejor && elementosHex.get(mejor)
     if (destino) {
       activo.tabIndex = -1
       destino.tabIndex = 0
       destino.focus()
+      anunciar(`Espejo ${NOMBRES_COLOR[ronda.fases.get(mejor)]}`)
     }
   })
 
-  actualizarVisualHexes()
-  actualizarHud()
-  actualizarBotonDeshacer()
+  const ayuda = crearAyuda(raiz, {
+    id: 'webb',
+    pasos: [
+      { texto: 'Toca un espejo para cambiarle el color.', dibujo: 'tocar' },
+      { texto: 'Ojo: sus vecinos también cambian.', dibujo: 'mwe-vecinos' },
+      { texto: 'Mira la galaxia de al lado. Mientras más pareja va quedando, más se enfoca.', dibujo: 'meta' },
+      { texto: 'Deja todos los espejos del mismo color y la vas a ver clarita.', dibujo: 'mwe-galaxia-clara' },
+    ],
+    alAbrir: () => { pausado = true },
+    alCerrar: () => { pausado = false },
+    demostrar: () => demostrar(),
+    siguientePista: () => resaltarPistaHex(),
+  })
+
+  function demostrar() {
+    // El juego se resuelve solo de verdad (cada toque cambia el color de
+    // verdad, con su onda y su sonido) y al final se restaura el estado
+    // previo del jugador — "el jugador solo mira" no debe significar que
+    // avanza gratis, solo que ve la mecánica completa en acción.
+    pausado = true
+    const fasesGuardadas = new Map(ronda.fases)
+    const contadorGuardado = new Map(ronda.contadorClicks)
+    const historialGuardado = [...historial]
+
+    const pasos = []
+    for (const [id, veces] of calcularCorreccion(ronda)) {
+      for (let i = 0; i < veces; i++) pasos.push(id)
+    }
+
+    let i = 0
+    function siguientePaso() {
+      if (destruido) return
+      if (i >= pasos.length) {
+        setTimeout(() => {
+          if (destruido) return
+          // Mutar los mismos Map en vez de reasignarlos: ronda.pulsar()
+          // los tiene capturados por clausura y debe seguir mutando los
+          // mismos objetos.
+          ronda.fases.clear()
+          for (const [k, v] of fasesGuardadas) ronda.fases.set(k, v)
+          ronda.contadorClicks.clear()
+          for (const [k, v] of contadorGuardado) ronda.contadorClicks.set(k, v)
+          historial = historialGuardado
+          pintarHexes()
+          actualizarGalaxia()
+          actualizarBotonDeshacer()
+          pausado = false
+        }, 1100)
+        return
+      }
+      const id = pasos[i]
+      mostrarManita(id, { persistente: true })
+      setTimeout(() => {
+        if (destruido) return
+        ronda.pulsar(id)
+        ronda.contadorClicks.set(id, ronda.contadorClicks.get(id) + 1)
+        animarOnda(id)
+        pintarHexes()
+        actualizarGalaxia()
+        tono({ frecuencia: 300 + ronda.fases.get(id) * 60, duracion: .09, tipo: 'sine', ganancia: .1 })
+        quitarManita()
+        i += 1
+        setTimeout(siguientePaso, 350)
+      }, 700)
+    }
+    siguientePaso()
+  }
 
   // ── contrato ──────────────────────────────────────────────────────────
   return {
     iniciar() {
-      canvasSensor = raiz.querySelector('.mwe-sensor')
-      redimensionarCanvas(canvasSensor)
-      ctxSensor = canvasSensor.getContext('2d')
+      iniciarRonda()
       quitarSuscripcion = suscribir(cuadro)
     },
     pausar() { pausado = true },
@@ -418,6 +602,7 @@ export function crearMision(contenedor, opciones) {
       quitarSuscripcion?.()
       quitarTeclado?.()
       entrada?.destruir()
+      ayuda.destruir()
       estilo.remove()
       contenedor.innerHTML = ''
       escuchas.clear()
@@ -428,44 +613,6 @@ export function crearMision(contenedor, opciones) {
       return () => escuchas.get(evento)?.delete(cb)
     },
   }
-}
-
-// ── Plantilla de DOM ──────────────────────────────────────────────────────
-function plantilla(tablero, layout, bloqueados, modoAccesible) {
-  // Ancho mínimo real para que cada hexágono nunca baje de 48px (spec de
-  // Webb), derivado de la geometría del tablero — no un número inventado.
-  // El anterior (460px fijo) era muy conservador y forzaba scroll horizontal
-  // incluso en teléfonos donde 48px por hexágono ya entraba de sobra.
-  const anchoMinimo = Math.ceil(4800 / layout.anchoHexPct)
-  return `
-    <div class="mwe-zona-panal">
-      <div class="mwe-panal" role="group" aria-label="Panal de espejos" style="aspect-ratio:${layout.aspecto};min-width:${anchoMinimo}px">
-        ${tablero.hexes.map((h) => {
-          const pos = layout.posiciones.get(h.id)
-          const esBloqueado = bloqueados.has(h.id)
-          return `
-          <button type="button" class="mwe-hex${esBloqueado ? ' mwe-hex--bloqueado' : ''}" data-id="${h.id}" tabindex="-1"
-            style="left:${pos.leftPct}%;top:${pos.topPct}%;width:${pos.anchoHexPct}%;height:${pos.altoHexPct}%"
-            aria-label="Segmento ${h.id}${esBloqueado ? ', bloqueado — solo cambia por sus vecinos' : ''}"
-            ${esBloqueado ? 'aria-disabled="true"' : ''}>
-            <span class="mwe-hex-anillo"></span>
-            <span class="mwe-hex-fase"></span>
-          </button>`
-        }).join('')}
-      </div>
-      <p class="mwe-instrucciones">Pulsá un segmento: suma fase a él y a sus vecinos. Llevá todos los segmentos a la misma fase. Teclado: <kbd>Q W E</kbd> / <kbd>A S D</kbd> para moverte entre segmentos, <kbd>Espacio</kbd> para pulsar.</p>
-      ${modoAccesible ? `
-        <div class="mwe-controles-accesibles">
-          <button type="button" class="mwe-boton-deshacer" data-accion="deshacer" disabled>DESHACER</button>
-          <p class="mwe-pista" aria-live="polite"></p>
-        </div>` : ''}
-    </div>
-    <div class="mwe-zona-sensor">
-      <canvas class="mwe-sensor"></canvas>
-      <p class="mwe-etiqueta-sensor">SENSOR DE FRENTE DE ONDA</p>
-    </div>
-    <p class="mwe-hud" aria-live="polite"></p>
-  `
 }
 
 // ── CSS del juego (inyectado y removido junto con el contenedor) ────────
@@ -480,23 +627,24 @@ const CSS_JUEGO = `
   font-family: inherit;
 }
 @media (min-width: 720px) {
-  .mwe-raiz { grid-template-columns: 7fr 3fr; grid-template-rows: 1fr auto; align-items: start; }
-  .mwe-zona-panal { grid-column: 1; grid-row: 1; }
-  .mwe-zona-sensor { grid-column: 2; grid-row: 1; }
-  .mwe-hud { grid-column: 1 / -1; grid-row: 2; }
+  .mwe-raiz { grid-template-columns: 3fr 2fr; align-items: center; }
 }
 .mwe-zona-panal {
   display: flex;
   flex-direction: column;
-  gap: var(--e-3, .75rem);
+  align-items: center;
+  gap: var(--e-4, 1rem);
   min-width: 0;
+}
+.mwe-panal-envoltorio {
+  width: 100%;
+  max-width: 460px;
   overflow-x: auto;
   padding: var(--e-2, .5rem);
 }
 .mwe-panal {
   position: relative;
   width: 100%;
-  max-width: 520px;
   margin: 0 auto;
 }
 .mwe-hex {
@@ -504,25 +652,14 @@ const CSS_JUEGO = `
   transform: translate(-50%, -50%);
   clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
   border: none;
-  min-width: 44px;
-  min-height: 38px;
-  background: rgba(155, 127, 232, var(--mwe-brillo, .28));
+  min-width: 48px;
+  min-height: 42px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  transition: background .18s ease;
+  transition: background .2s ease;
+  box-shadow: inset 0 0 0 2px rgba(212, 175, 106, .5);
 }
-.mwe-hex:focus-visible { outline: 2px solid var(--acento-mision, #9B7FE8); outline-offset: 3px; }
-.mwe-hex--bloqueado { cursor: not-allowed; opacity: .5; }
-.mwe-hex--bloqueado::before {
-  content: '🔒';
-  position: absolute;
-  top: 2px;
-  font-size: .6rem;
-}
-.mwe-hex--onda, .mwe-hex--onda-vecino { border: 2px solid var(--acento-mision, #9B7FE8); }
+.mwe-hex:focus-visible { outline: 3px solid #fff; outline-offset: 3px; z-index: 2; }
+.mwe-hex--onda, .mwe-hex--onda-vecino { box-shadow: inset 0 0 0 2px rgba(212, 175, 106, .5), 0 0 0 4px rgba(155, 127, 232, .8); }
 .mwe-hex--onda { animation: mwe-onda .24s cubic-bezier(.2,.8,.2,1); }
 .mwe-hex--onda-vecino { animation: mwe-onda-vecino .24s cubic-bezier(.2,.8,.2,1); }
 @keyframes mwe-onda {
@@ -530,88 +667,62 @@ const CSS_JUEGO = `
   40% { transform: translate(-50%, -50%) scale(1.16); }
   100% { transform: translate(-50%, -50%) scale(1); }
 }
-@keyframes mwe-onda-vecino {
-  0% { opacity: .75; }
-  50% { opacity: 1; }
-  100% { opacity: .75; }
-}
-.mwe-hex--pista { box-shadow: 0 0 0 3px var(--acento-mision, #9B7FE8), 0 0 16px var(--acento-mision, #9B7FE8); }
-.mwe-hex-anillo {
+@keyframes mwe-onda-vecino { 0%, 100% { opacity: 1; } 50% { opacity: .75; } }
+
+.mwe-manita {
   position: absolute;
-  inset: 18%;
-  border-radius: 50%;
-  background: conic-gradient(var(--acento-mision, #9B7FE8) calc(var(--mwe-anillo, 0) * 360deg), rgba(255,255,255,.14) 0);
-  pointer-events: none;
-}
-.mwe-hex-fase {
-  position: relative;
-  font-size: .7rem;
-  font-weight: 700;
+  transform: translate(-50%, -110%);
+  width: 60px;
+  height: 60px;
   color: #fff;
-  text-shadow: 0 1px 3px rgba(0,0,0,.6);
   pointer-events: none;
+  animation: mwe-manita-tap 1s ease-in-out infinite;
+  z-index: 3;
 }
-.mwe-instrucciones {
-  font-size: var(--hud-label, .75rem);
-  color: rgba(255,255,255,.6);
-  text-align: center;
-  margin: 0;
+@keyframes mwe-manita-tap {
+  0%, 100% { transform: translate(-50%, -110%); }
+  50% { transform: translate(-50%, -85%); }
 }
-.mwe-instrucciones kbd {
-  font: inherit;
-  padding: 0 .3em;
-  border: 1px solid rgba(255,255,255,.25);
-  border-radius: .25em;
-}
-.mwe-controles-accesibles {
-  display: flex;
-  align-items: center;
-  gap: var(--e-3, .75rem);
-  flex-wrap: wrap;
-  justify-content: center;
-}
+
+.mwe-controles { display: flex; justify-content: center; }
 .mwe-boton-deshacer {
   min-height: 44px;
-  padding: 0 var(--e-4, 1rem);
-  border-radius: .5rem;
+  padding: 0 var(--e-6, 1.5rem);
+  border-radius: var(--e-2, .5rem);
   border: 1px solid var(--acento-mision, #9B7FE8);
-  background: rgba(155,127,232,.14);
+  background: color-mix(in srgb, var(--acento-mision, #9B7FE8) 14%, transparent);
   color: #fff;
+  font-size: var(--hud-label);
+  font-weight: 600;
   cursor: pointer;
 }
-.mwe-boton-deshacer:disabled { opacity: .4; cursor: not-allowed; }
-.mwe-pista {
-  font-size: var(--hud-label, .75rem);
-  color: var(--acento-mision, #9B7FE8);
-  margin: 0;
-  min-height: 1.2em;
-}
-.mwe-zona-sensor {
-  position: relative;
+.mwe-boton-deshacer:disabled { opacity: .35; cursor: default; }
+.mwe-anuncio { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+.mwe-zona-galaxia {
   display: flex;
-  flex-direction: column;
-  background: rgba(14, 10, 24, .5);
-  border-radius: .75rem;
-  padding: var(--e-3, .75rem);
-  min-height: 160px;
+  align-items: center;
+  justify-content: center;
+  padding: var(--e-4, 1rem);
 }
-.mwe-sensor { flex: 1; width: 100%; border-radius: .5rem; }
-.mwe-etiqueta-sensor {
-  margin: var(--e-2, .5rem) 0 0;
-  font-size: var(--hud-label, .75rem);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,.5);
-  text-align: center;
+.mwe-galaxia {
+  width: min(100%, 320px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  filter: blur(18px);
+  transition: filter .5s ease;
+  box-shadow: 0 0 40px rgba(155, 127, 232, .2);
 }
-.mwe-hud {
-  text-align: center;
-  font-size: var(--hud-label, .75rem);
-  color: rgba(255,255,255,.6);
-  letter-spacing: .06em;
-  margin: 0;
-}
+.mwe-galaxia svg { display: block; width: 100%; height: 100%; }
+
 @media (prefers-reduced-motion: reduce) {
-  .mwe-hex, .mwe-hex--onda, .mwe-hex--onda-vecino { animation: none; transition: none; }
+  .mwe-hex, .mwe-hex--onda, .mwe-hex--onda-vecino, .mwe-manita {
+    animation: none !important;
+    transition: none !important;
+  }
+  /* La nitidez de la galaxia sigue funcionando como pista: es un valor de
+     estado (blur calculado por convergencia), no una animación en loop —
+     por eso no hace falta tocar .mwe-galaxia acá. */
 }
 `

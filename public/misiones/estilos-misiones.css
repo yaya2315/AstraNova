@@ -267,3 +267,201 @@ body.mision-abierta {
     justify-content: space-between;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   AYUDA PASO A PASO — nucleo/ayuda-paso-a-paso.js
+   Vive dentro del contenedor de cada juego (position:relative), así el
+   botón queda en la esquina del área de juego y no en la del modal entero.
+═══════════════════════════════════════════════════════════════════════ */
+.ayuda-raiz {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.ayuda-boton {
+  position: absolute;
+  right: var(--e-3);
+  bottom: var(--e-3);
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  min-height: 44px;
+  padding: var(--e-2) var(--e-4);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  background: rgba(10, 8, 16, .6);
+  color: rgba(255, 255, 255, .7);
+  font-size: var(--hud-label);
+  cursor: pointer;
+  transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), border-color .2s ease, color .2s ease;
+}
+.ayuda-boton span { color: var(--acento-mision); font-weight: 700; }
+.ayuda-boton:hover,
+.ayuda-boton:focus-visible {
+  border-color: var(--acento-mision);
+  color: #fff;
+}
+.ayuda-boton:focus-visible { outline: 2px solid var(--acento-mision); outline-offset: 2px; }
+.ayuda-boton--destacado { transform: scale(1.14); }
+
+.ayuda-oferta {
+  position: absolute;
+  right: var(--e-3);
+  bottom: calc(44px + var(--e-3) + var(--e-2));
+  pointer-events: auto;
+  padding: var(--e-2) var(--e-3);
+  border-radius: var(--e-2);
+  background: var(--acento-mision);
+  color: #14101c;
+  font-size: var(--hud-label);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+  animation: ayuda-oferta-aparecer .3s ease both;
+}
+@keyframes ayuda-oferta-aparecer {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ayuda-panel-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--e-4);
+  background: rgba(4, 3, 8, .78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: auto;
+  animation: mision-aparecer .2s ease both;
+}
+/* Mismo caso que .mision-fase[hidden] en la sección del modal: un author-rule
+   con la misma especificidad que [hidden] le gana a la regla nativa del
+   navegador — sin esto, el panel de ayuda se ve aunque hidden esté puesto. */
+.ayuda-panel-fondo[hidden] {
+  display: none;
+}
+
+.ayuda-panel {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e-4);
+  padding: var(--e-8) var(--e-6) var(--e-6);
+  background: rgba(18, 14, 26, .98);
+  border: 1px solid color-mix(in srgb, var(--acento-mision) 35%, transparent);
+  border-radius: var(--e-4);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+  outline: none;
+  text-align: center;
+}
+
+.ayuda-dibujo {
+  width: min(220px, 70%);
+  color: var(--acento-mision);
+}
+.ayuda-dibujo svg { display: block; width: 100%; height: auto; }
+
+.ayuda-texto {
+  font-size: clamp(1.05rem, .95rem + .5vw, 1.3rem);
+  font-weight: 600;
+  color: #fff;
+  max-width: 30ch;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.ayuda-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  width: 100%;
+}
+.ayuda-contador {
+  font-size: var(--hud-label);
+  color: rgba(255, 255, 255, .45);
+  white-space: nowrap;
+}
+.ayuda-anterior,
+.ayuda-siguiente {
+  min-height: 44px;
+  padding: var(--e-2) var(--e-4);
+  border-radius: var(--e-2);
+  font-size: var(--hud-label);
+  font-weight: 600;
+  cursor: pointer;
+}
+.ayuda-anterior {
+  border: 1px solid rgba(255, 255, 255, .14);
+  background: transparent;
+  color: rgba(255, 255, 255, .6);
+}
+.ayuda-anterior:disabled { opacity: .3; cursor: default; }
+.ayuda-siguiente {
+  border: 1px solid var(--acento-mision);
+  background: color-mix(in srgb, var(--acento-mision) 18%, transparent);
+  color: #fff;
+  flex: 1;
+  max-width: 60%;
+}
+.ayuda-anterior:focus-visible,
+.ayuda-siguiente:focus-visible,
+.ayuda-ejemplo:focus-visible {
+  outline: 2px solid var(--acento-mision);
+  outline-offset: 2px;
+}
+
+.ayuda-ejemplo {
+  min-height: 44px;
+  padding: var(--e-2) var(--e-4);
+  border: none;
+  background: transparent;
+  color: var(--acento-mision);
+  font-size: var(--hud-label);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ── Animaciones de los dibujos del catálogo ─────────────────────────── */
+@keyframes ayuda-arrastrar-mover {
+  0%, 12% { transform: translateX(0); }
+  50% { transform: translateX(90px); }
+  85%, 100% { transform: translateX(90px); }
+}
+.ayuda-dibujo-mano { animation: ayuda-arrastrar-mover 2.4s cubic-bezier(.45, 0, .55, 1) infinite; }
+
+@keyframes ayuda-tocar-onda1 { 0% { r: 9; opacity: .8; } 100% { r: 28; opacity: 0; } }
+@keyframes ayuda-tocar-onda2 { 0% { r: 9; opacity: .5; } 100% { r: 34; opacity: 0; } }
+.ayuda-dibujo-onda1 { animation: ayuda-tocar-onda1 1.6s ease-out infinite; }
+.ayuda-dibujo-onda2 { animation: ayuda-tocar-onda2 1.6s ease-out infinite .4s; }
+
+@keyframes ayuda-esperar-girar { to { transform: rotate(360deg); } }
+.ayuda-dibujo-manecilla { animation: ayuda-esperar-girar 4s linear infinite; }
+
+@keyframes ayuda-meta-pulso { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+.ayuda-dibujo-estrella { animation: ayuda-meta-pulso 1.7s ease-in-out infinite; }
+
+/* La información nunca depende de la animación: cada dibujo ya se entiende
+   en su cuadro estático (mano sobre el camino, ondas de tamaños distintos,
+   reloj con manecilla quieta, estrella con destellos) — acá solo apagamos
+   el movimiento. */
+@media (prefers-reduced-motion: reduce) {
+  .ayuda-dibujo-mano,
+  .ayuda-dibujo-onda1,
+  .ayuda-dibujo-onda2,
+  .ayuda-dibujo-manecilla,
+  .ayuda-dibujo-estrella,
+  .ayuda-boton,
+  .ayuda-oferta {
+    animation: none !important;
+    transition: none !important;
+  }
+}

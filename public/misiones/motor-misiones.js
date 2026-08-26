@@ -8,8 +8,11 @@
 //   export const meta = { titulo, acento, objetivo, datoInicial, datoCierre }
 //   export function crearMision(contenedor, opciones) {
 //     // opciones = { dificultad: 1|2|3, modoAccesible: bool, semilla: number }
-//     return { iniciar, pausar, reanudar, destruir, on }
+//     return { iniciar, pausar, reanudar, destruir, on, demostrar, siguientePista }
 //   }
+//   `demostrar` y `siguientePista` son OPCIONALES: los usa el propio juego para
+//   armar su panel de ayuda (ver nucleo/ayuda-paso-a-paso.js) — este motor no
+//   los llama directamente, solo carga el módulo y confía en su contrato.
 //   eventos emitidos vía on(): 'progreso' (0..1) | 'superada' (metricas, con
 //   metricas.estrellas ya calculado por el propio juego vía evaluador-
 //   estrellas.js) | 'fallada' (razon) | 'pista'

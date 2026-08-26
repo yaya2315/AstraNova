@@ -1,10 +1,12 @@
 // _prueba.js — NO es una misión real. Ejercita el contrato completo
-// (iniciar/pausar/reanudar/destruir/on) y los cuatro módulos del núcleo para
-// validar motor-misiones.js durante la Fase 1. Se borra antes de producción.
+// (iniciar/pausar/reanudar/destruir/on) y los módulos del núcleo —incluida
+// la ayuda paso a paso— para validar el motor durante las Fases 1 y 2.
+// Se borra antes de producción.
 import { suscribir } from '../nucleo/bucle-animacion.js'
 import { crearEntrada } from '../nucleo/entrada-unificada.js'
 import { tono } from '../nucleo/audio-mision.js'
 import { evaluarEstrellas } from '../nucleo/evaluador-estrellas.js'
+import { crearAyuda } from '../nucleo/ayuda-paso-a-paso.js'
 
 export const meta = {
   titulo: 'Misión de prueba',
@@ -34,12 +36,34 @@ export function crearMision(contenedor, opciones) {
   const circulo = contenedor.querySelector('[data-prueba-circulo]')
   const contador = contenedor.querySelector('[data-prueba-contador]')
 
+  const ayuda = crearAyuda(contenedor, {
+    id: '_prueba',
+    pasos: [
+      { texto: 'Toca el círculo de colores.', dibujo: 'tocar' },
+      { texto: 'Espera un poquito entre toque y toque.', dibujo: 'esperar' },
+      { texto: 'Llega a 5 toques y ganaste.', dibujo: 'meta' },
+    ],
+    alAbrir: () => { activo = false },
+    alCerrar: () => { activo = true },
+    demostrar: () => {
+      circulo.dataset.demoEjecutada = 'true'
+      circulo.style.outline = '4px solid #fff'
+      setTimeout(() => { circulo.style.outline = '' }, 800)
+    },
+    siguientePista: () => {
+      circulo.dataset.pistaMostrada = 'true'
+      circulo.style.boxShadow = '0 0 0 8px rgba(255,255,255,.5)'
+      setTimeout(() => { circulo.style.boxShadow = '' }, 1200)
+    },
+  })
+
   const entrada = crearEntrada(contenedor)
   const quitarPuntero = entrada.on('puntero-abajo', () => {
     if (!activo) return
     pulsos += 1
     contador.textContent = `Pulsos: ${pulsos} / 5`
     tono({ frecuencia: 440 + pulsos * 40, duracion: 0.12 })
+    ayuda.marcarLogro()
     if (pulsos >= 5) {
       const { estrellas } = evaluarEstrellas({
         metricas: { pulsos },
@@ -80,6 +104,7 @@ export function crearMision(contenedor, opciones) {
       quitarPuntero()
       quitarTecla()
       entrada.destruir()
+      ayuda.destruir()
       contenedor.innerHTML = ''
     },
     on(evento, cb) {
