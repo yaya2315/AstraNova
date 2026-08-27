@@ -24,6 +24,21 @@ const CLAVE_DIFICULTAD = 'astra-mision-dificultad'
 const CLAVE_ACCESIBLE = 'astra-mision-accesible'
 const CLAVE_SILENCIO = 'astra-mision-silencio'
 
+// Íconos en SVG (no emoji): el emoji de parlante/cerrar se ve distinto según
+// SO y fuente instalada — un trazo propio se ve exactamente igual siempre.
+const ICONO_SONIDO = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/>
+  <path d="M16.3 8.7a5 5 0 0 1 0 6.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M19 6a8.7 8.7 0 0 1 0 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>
+</svg>`
+const ICONO_SONIDO_MUDO = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/>
+  <path d="M16.2 9.2l4.6 4.6M20.8 9.2l-4.6 4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+</svg>`
+const ICONO_CERRAR = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+</svg>`
+
 const cargadores = new Map() // id -> () => Promise<módulo>
 let misionActiva = null
 
@@ -121,11 +136,14 @@ function crearEsqueletoModal(id) {
             <button type="button" data-dificultad="3">N3</button>
           </div>
           <label class="mision-toggle-accesible">
-            <input type="checkbox" data-accion="accesible" />
-            <span>Modo accesible</span>
+            <input type="checkbox" data-accion="accesible" class="mision-toggle-input" />
+            <span class="mision-toggle-pista" aria-hidden="true"></span>
+            <span class="mision-toggle-texto">Modo accesible</span>
           </label>
-          <button type="button" class="mision-boton-icono" data-accion="silencio" aria-pressed="false" aria-label="Silenciar sonido">🔊</button>
-          <button type="button" class="mision-cerrar" aria-label="Cerrar misión">✕</button>
+          <div class="mision-grupo-iconos">
+            <button type="button" class="mision-boton-icono" data-accion="silencio" aria-pressed="false" aria-label="Silenciar sonido">${ICONO_SONIDO}</button>
+            <button type="button" class="mision-cerrar" aria-label="Cerrar misión">${ICONO_CERRAR}</button>
+          </div>
         </div>
       </header>
 
@@ -193,7 +211,7 @@ export async function abrirMision(id, opciones = {}) {
     })
     checkboxAccesible.checked = modoAccesible
     botonSilencio.setAttribute('aria-pressed', String(estaSilenciado()))
-    botonSilencio.textContent = estaSilenciado() ? '🔇' : '🔊'
+    botonSilencio.innerHTML = estaSilenciado() ? ICONO_SONIDO_MUDO : ICONO_SONIDO
   }
   reflejarControles()
 
