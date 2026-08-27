@@ -1,12 +1,13 @@
 'use client'
 
 import { Suspense, useRef, useState, useMemo, useCallback, useEffect, memo } from 'react'
-import { createPortal } from 'react-dom'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Stars, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { planets, type PlanetData } from '@/lib/data'
+import { withBasePath } from '@/lib/basePath'
 import SystemFlybyView from './SystemFlyby'
+import { useDeepNav } from './DeepNavEngine'
 
 const ORBIT_SEGMENTS = 64
 const PLANET_SEGMENTS = 48
@@ -147,7 +148,7 @@ export const Sun = memo(function Sun() {
   const eruptT   = useRef(0)
   const [erupting, setErupting] = useState(false)
 
-  const texture = useMemo(() => loadTexture('/textures/8k_sun.jpg'), [])
+  const texture = useMemo(() => loadTexture(withBasePath('/textures/8k_sun.jpg')), [])
 
   const glowTex = useMemo(() => {
     const c = document.createElement('canvas'); c.width = 128; c.height = 128
@@ -311,7 +312,7 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
 /* ====== SATURN RINGS ====== */
 export const SaturnRings = memo(function SaturnRings({ size }: { size: number }) {
   const innerR = size * 1.3, outerR = size * 2.4
-  const ringTex = useMemo(() => loadTexture('/textures/8k_saturn_ring_alpha.jpg'), [])
+  const ringTex = useMemo(() => loadTexture(withBasePath('/textures/8k_saturn_ring_alpha.jpg')), [])
 
   const geo = useMemo(() => {
     const g = new THREE.RingGeometry(innerR, outerR, 48)
@@ -575,7 +576,7 @@ function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick, flyTarge
     <>
       <ambientLight intensity={0.5} color="#334466" />
       <directionalLight position={[-15, 5, -20]} intensity={0.6} color="#6680cc" />
-      <Stars radius={180} depth={80} count={3000} factor={3} saturation={0} />
+      <Stars radius={180} depth={80} count={1800} factor={3} saturation={0} />
       <Sun />
       {planets.map((p) => (
         <Planet key={p.name} data={p} speedMul={speedMul} onHover={onPlanetHover} onLeave={onPlanetLeave}
@@ -617,7 +618,7 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
 
         <div className="flex flex-col lg:flex-row gap-8 items-start">
           <div className="w-full lg:w-[320px] aspect-square rounded-2xl overflow-hidden flex-shrink-0 bg-space-900/50 border border-white/5">
-            <Canvas camera={{ position: [0, 0, 4], fov: 45 }} dpr={[1, 1.5]}
+            <Canvas camera={{ position: [0, 0, 4], fov: 45 }} dpr={[0.75, 1.25]}
               gl={{ antialias: false, alpha: true, toneMapping: THREE.ACESFilmicToneMapping }}>
               <ambientLight intensity={0.4} color="#334466" />
               <directionalLight position={[5, 3, 5]} intensity={1.2} color="#fff0dd" />
@@ -679,6 +680,7 @@ function PlanetDetailMesh({ data }: { data: PlanetData }) {
 
 /* ====== MAIN EXPORT ====== */
 export default function SolarSystem() {
+  const { depth } = useDeepNav()
   const containerRef = useRef<HTMLDivElement>(null!)
   const [hovered, setHovered] = useState<PlanetData | null>(null)
   const [selected, setSelected] = useState<PlanetData | null>(null)
@@ -774,7 +776,7 @@ export default function SolarSystem() {
           vive en el padre y sigue intacto, así que la cámara vuelve a enfocar el
           mismo planeta apenas se remonta — no se pierde el lugar donde estabas. */}
       {!flying && (
-        <Canvas camera={{ position: [0, 30, 55], fov: 50 }} dpr={[1, 1.5]}
+        <Canvas camera={{ position: [0, 30, 55], fov: 50 }} dpr={[0.75, 1.25]} frameloop={depth === 1 ? 'always' : 'never'}
           gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2, powerPreference: 'high-performance' }}
           onPointerMove={handlePointerMove}>
           <Suspense fallback={null}>
@@ -828,5 +830,5 @@ export default function SolarSystem() {
     </div>
   )
 
-  return immersive ? createPortal(view, document.body) : view
+  return view
 }

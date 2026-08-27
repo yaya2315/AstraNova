@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
-    "postbuild": "node scripts/postbuild.mjs",
-    "start": "npx serve out"
+    "start": "node scripts/start-static.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

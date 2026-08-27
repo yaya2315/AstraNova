@@ -399,9 +399,9 @@ export function HeroSection() {
               >
                 <span style={{ color: 'rgba(0,240,255,0.5)', flexShrink: 0 }}>{s.icon}</span>
                 <div className="text-center min-w-0">
-                  <div className="font-display font-bold text-[0.95rem] leading-none" style={{ color: '#00F0FF' }}>{s.n}</div>
-                  <div className="font-display text-[0.38rem] tracking-[2px] mt-1" style={{ color: 'rgba(255,255,255,0.7)' }}>{s.label}</div>
-                  <div className="font-display text-[0.34rem] tracking-[1px] mt-0.5" style={{ color: 'rgba(255,255,255,0.2)' }}>{s.sub}</div>
+                  <div className="font-display font-bold text-[1.05rem] leading-none" style={{ color: '#00F0FF' }}>{s.n}</div>
+                  <div className="font-display text-[0.62rem] tracking-[1.5px] mt-1.5" style={{ color: 'rgba(255,255,255,0.7)' }}>{s.label}</div>
+                  <div className="font-display text-[0.56rem] tracking-[1px] mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.sub}</div>
                 </div>
               </motion.div>
             ))}
@@ -429,7 +429,7 @@ export function HistorySection() {
 
   return (
     <section id="historia" className="relative z-[1] pt-40 pb-24">
-      <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12">
+      <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12 lg:pl-[136px]">
 
         {/* Zone header */}
         <FadeUp className="text-center mb-4">
@@ -539,6 +539,7 @@ export function ConstellationsSection() {
   const bgStars = useRef<{ x:number;y:number;r:number;o:number;tw:number }[]>([])
   const animRef = useRef<number>(0)
   const timeRef = useRef(0)
+  const mapVisibleRef = useRef(true)
   const [customConstellations, setCustomConstellations] = useState<ConstellationData[]>([])
   const customRef = useRef<ConstellationData[]>([])
   customRef.current = customConstellations
@@ -566,6 +567,7 @@ export function ConstellationsSection() {
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current; if (!canvas) return
+    if (!mapVisibleRef.current) { animRef.current = 0; return }
     const ctx = canvas.getContext('2d')!
     const W = VIRT_W, H = VIRT_H
     timeRef.current += 0.008
@@ -634,7 +636,17 @@ export function ConstellationsSection() {
 
   useEffect(() => {
     animRef.current = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(animRef.current)
+    const observer = new IntersectionObserver(([entry]) => {
+      mapVisibleRef.current = entry.isIntersecting
+      if (entry.isIntersecting && animRef.current === 0) {
+        animRef.current = requestAnimationFrame(draw)
+      }
+    }, { threshold: 0 })
+    if (containerRef.current) observer.observe(containerRef.current)
+    return () => {
+      cancelAnimationFrame(animRef.current)
+      observer.disconnect()
+    }
   }, [draw])
 
   const onMouseDown = (e: React.MouseEvent) => {
@@ -1215,9 +1227,11 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
    GALLERY — Floating images in void
 ═══════════════════════════════════════════════════════════════════════════ */
 export function GallerySection() {
+  const [abierta, setAbierta] = useState<number | null>(null)
+
   return (
     <section id="galeria" className="relative z-[1] pt-40 pb-24">
-      <div className="max-w-[1400px] mx-auto px-6 sm:px-8 md:px-12">
+      <div className="max-w-[1400px] mx-auto px-6 sm:px-8 md:px-12 lg:pl-[136px]">
 
         <FadeUp className="text-center mb-4">
           <ZoneLabel text="FOTOGRAFÍA ESPACIAL" />
@@ -1226,34 +1240,145 @@ export function GallerySection() {
           <h2 className="font-serif text-[clamp(2.6rem,5.5vw,4.5rem)] text-white/75 font-normal italic mb-3">Galería Cósmica</h2>
         </FadeUp>
         <FadeUp className="text-center" delay={0.15}>
-          <p className="text-slate-500 text-base max-w-[540px] mx-auto mb-14 leading-relaxed">
-            Las imágenes más impresionantes del universo.
+          <p className="text-slate-500 text-base max-w-[540px] mx-auto mb-6 leading-relaxed">
+            Las imágenes más impresionantes del universo — tocá una para ver más.
           </p>
         </FadeUp>
 
-        {/* aspect-ratio uniforme por celda (antes variaba con un patrón tipo
-            masonry) + object-cover en cada imagen para recortar sin deformar. */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 lg:gap-3">
+        <FadeUp className="flex items-center justify-center gap-2.5 flex-wrap mb-12" delay={0.2}>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-display text-[0.46rem] tracking-[2px] text-accent-cyan"
+            style={{ background: 'rgba(34,211,238,0.06)', border: '1px solid rgba(34,211,238,0.15)' }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-pulse" />
+            {galleryImages.length} FOTOGRAFÍAS
+          </span>
+          <span className="px-3 py-1 rounded-full font-display text-[0.46rem] tracking-[2px] text-slate-400"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            HUBBLE · JWST · NASA · VOYAGER
+          </span>
+        </FadeUp>
+
+        {/* Bento/masonry: cada foto tiene un tamaño (grande/ancho/normal, ver
+            data.ts) en vez de una grilla pareja — rompe la monotonía y le da
+            a la sección una jerarquía visual real. auto-rows + dense evita
+            que queden huecos al combinar tiles de distinto tamaño. */}
+        <div className="grid grid-cols-2 lg:grid-cols-3 auto-rows-[150px] sm:auto-rows-[180px] lg:auto-rows-[220px] gap-2 lg:gap-3"
+          style={{ gridAutoFlow: 'dense' }}>
             {galleryImages.map((img, i) => (
                 <ScaleIn key={i} delay={i * 0.05}
-                  className="relative overflow-hidden group cursor-pointer aspect-[4/3]"
-                  style={{ borderRadius: '4px' }}>
+                  className={
+                    img.tam === 'grande' ? 'col-span-2 row-span-2'
+                    : img.tam === 'ancho' ? 'col-span-2 row-span-1'
+                    : 'col-span-1 row-span-1'
+                  }>
+                <button type="button" onClick={() => setAbierta(i)}
+                  aria-label={`Ver ${img.alt} en detalle`}
+                  className="relative overflow-hidden group cursor-pointer block w-full h-full text-left"
+                  style={{ borderRadius: '6px' }}>
                   <img src={img.src} alt={img.alt} loading="lazy"
-                    className="w-full h-full object-cover transition-all duration-700 ease-out group-hover:scale-105 opacity-70 group-hover:opacity-90" />
-                  {/* Reveal on hover */}
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-all duration-500"
-                    style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.80) 0%, transparent 50%)' }} />
-                  <div className="absolute bottom-0 left-0 right-0 p-4 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500 ease-out">
-                    <span className="font-display text-[0.55rem] tracking-[4px] text-white/80 uppercase">{img.alt}</span>
+                    className="w-full h-full object-cover transition-all duration-700 ease-out group-hover:scale-105 opacity-80 group-hover:opacity-95" />
+                  {/* Categoría: siempre visible, arriba a la izquierda */}
+                  <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full font-display text-[0.42rem] tracking-[2px] text-white/85 uppercase"
+                    style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                    {img.categoria}
+                  </span>
+                  {/* Título: siempre parcialmente visible, se afirma en hover */}
+                  <div className="absolute inset-x-0 bottom-0 transition-all duration-500"
+                    style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 65%)', height: '55%' }} />
+                  <div className="absolute bottom-0 left-0 right-0 p-3.5 lg:p-4 translate-y-0.5 opacity-90 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500 ease-out">
+                    <span className={`font-display tracking-[3px] text-white uppercase ${img.tam === 'grande' ? 'text-[0.7rem] lg:text-[0.8rem]' : 'text-[0.55rem]'}`}>{img.alt}</span>
                   </div>
                   {/* Edge energy on hover */}
                   <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                    style={{ boxShadow: 'inset 0 0 0 1px rgba(34,211,238,0.2), inset 0 0 20px rgba(34,211,238,0.03)' }} />
+                    style={{ boxShadow: 'inset 0 0 0 1px rgba(34,211,238,0.25), inset 0 0 24px rgba(34,211,238,0.04)' }} />
+                  {/* Lupa: da la pista de que se puede ampliar, sin esperar al hover del mouse en touch */}
+                  <div className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                    style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
+                  </div>
+                </button>
                 </ScaleIn>
             ))}
           </div>
       </div>
+
+      <AnimatePresence>
+        {abierta !== null && (
+          <GalleryLightbox
+            indice={abierta}
+            onClose={() => setAbierta(null)}
+            onNavegar={(dir) => setAbierta((prev) => {
+              if (prev === null) return prev
+              const total = galleryImages.length
+              return (prev + dir + total) % total
+            })}
+          />
+        )}
+      </AnimatePresence>
     </section>
+  )
+}
+
+// ─── Lightbox de la galería ────────────────────────────────────────────────
+function GalleryLightbox({ indice, onClose, onNavegar }: { indice: number; onClose: () => void; onNavegar: (dir: 1 | -1) => void }) {
+  const img = galleryImages[indice]
+
+  useEffect(() => {
+    function alTeclado(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowRight') onNavegar(1)
+      else if (e.key === 'ArrowLeft') onNavegar(-1)
+    }
+    window.addEventListener('keydown', alTeclado)
+    return () => window.removeEventListener('keydown', alTeclado)
+  }, [onClose, onNavegar])
+
+  // Portal a document.body por la misma razón que el modal de rompecabezas de
+  // constelaciones (ver más arriba): las secciones viven dentro de un
+  // `.deep-layer` con `transform` siempre aplicado, que rompe `position:fixed`.
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[1100] flex items-center justify-center p-4 sm:p-8"
+      style={{ background: 'rgba(0,0,0,0.86)', backdropFilter: 'blur(10px)' }}
+      onClick={onClose}
+    >
+      <button type="button" onClick={onClose} aria-label="Cerrar"
+        className="absolute top-4 right-4 sm:top-6 sm:right-6 w-10 h-10 rounded-full flex items-center justify-center text-white/60 hover:text-white transition-colors z-10"
+        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+
+      <button type="button" onClick={(e) => { e.stopPropagation(); onNavegar(-1) }} aria-label="Anterior"
+        className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center text-white/50 hover:text-white transition-colors z-10"
+        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <button type="button" onClick={(e) => { e.stopPropagation(); onNavegar(1) }} aria-label="Siguiente"
+        className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center text-white/50 hover:text-white transition-colors z-10"
+        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+
+      <motion.div
+        key={indice}
+        initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+        transition={{ duration: 0.25, ease: EASE }}
+        className="card-glass-static w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative w-full bg-black/40" style={{ aspectRatio: '3/2' }}>
+          <img src={img.srcDetalle} alt={img.alt} className="w-full h-full object-cover" />
+        </div>
+        <div className="p-5 sm:p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="font-display text-[0.5rem] tracking-[3px] text-accent-cyan">{String(indice + 1).padStart(2, '0')} / {String(galleryImages.length).padStart(2, '0')}</span>
+          </div>
+          <h3 className="font-display text-lg sm:text-xl font-semibold text-white/90 mb-2">{img.alt}</h3>
+          <p className="text-slate-400 text-sm leading-relaxed">{img.descripcion}</p>
+        </div>
+      </motion.div>
+    </motion.div>,
+    document.body
   )
 }
 
@@ -1366,17 +1491,19 @@ function SequenceGame({ color, onComplete }: { color: MissionColorScheme; onComp
 
 /* ─── Game 2: Zona de Captura (Parker Solar Probe) ────────────────────────── */
 function ZoneGame({ color, onComplete }: { color: MissionColorScheme; onComplete: () => void }) {
-  const [pos, setPos]       = useState(50)
   const [running, setRunning] = useState(false)
   const [missed, setMissed] = useState(false)
   const animRef  = useRef<number>(0)
   const phaseRef = useRef(0)
+  const posRef   = useRef(50)
+  const indicatorRef = useRef<HTMLDivElement>(null)
 
   const start = () => {
     setRunning(true); setMissed(false)
     const anim = () => {
       phaseRef.current += 0.042
-      setPos(50 + Math.sin(phaseRef.current) * 41)
+      posRef.current = 50 + Math.sin(phaseRef.current) * 41
+      if (indicatorRef.current) indicatorRef.current.style.left = `calc(${posRef.current}% - 1px)`
       animRef.current = requestAnimationFrame(anim)
     }
     animRef.current = requestAnimationFrame(anim)
@@ -1384,7 +1511,7 @@ function ZoneGame({ color, onComplete }: { color: MissionColorScheme; onComplete
 
   const capture = () => {
     cancelAnimationFrame(animRef.current); setRunning(false)
-    if (pos >= 36 && pos <= 64) { onComplete(); return }
+    if (posRef.current >= 36 && posRef.current <= 64) { onComplete(); return }
     setMissed(true)
   }
 
@@ -1398,8 +1525,8 @@ function ZoneGame({ color, onComplete }: { color: MissionColorScheme; onComplete
           style={{ left: '36%', width: '28%', background: 'rgba(201,168,76,0.11)', borderLeft: '1px solid rgba(201,168,76,0.28)', borderRight: '1px solid rgba(201,168,76,0.28)' }} />
         <span className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 font-display text-[0.38rem] tracking-widest text-accent-gold/30 pointer-events-none">ZONA SEGURA</span>
         {running && (
-          <div className="absolute top-1.5 bottom-1.5 w-0.5 rounded-full"
-            style={{ left: `calc(${pos}% - 1px)`, background: '#c9a84c', boxShadow: '0 0 8px #c9a84c', transition: 'none' }} />
+          <div ref={indicatorRef} className="absolute top-1.5 bottom-1.5 w-0.5 rounded-full"
+            style={{ left: `calc(${posRef.current}% - 1px)`, background: '#c9a84c', boxShadow: '0 0 8px #c9a84c', transition: 'none' }} />
         )}
       </div>
       {missed && <p className="font-display text-[0.42rem] tracking-[2px] text-red-400/60 text-center">✕ FUERA DE ZONA — Reinicia</p>}
@@ -1557,16 +1684,18 @@ function MirrorsGame({ color, onComplete }: { color: MissionColorScheme; onCompl
 /* ─── Game 5: Detectar la Onda (LISA Pathfinder) ─────────────────────────── */
 function WaveGame({ color, onComplete }: { color: MissionColorScheme; onComplete: () => void }) {
   const [running, setRunning] = useState(false)
-  const [barH, setBarH]       = useState(0.5)
   const [missed, setMissed]   = useState(false)
   const animRef  = useRef<number>(0)
   const phaseRef = useRef(0)
+  const barHRef  = useRef(0.5)
+  const barRef   = useRef<HTMLDivElement>(null)
 
   const start = () => {
     setRunning(true); setMissed(false)
     const anim = () => {
       phaseRef.current += 0.038
-      setBarH((Math.sin(phaseRef.current) + 1) / 2)
+      barHRef.current = (Math.sin(phaseRef.current) + 1) / 2
+      if (barRef.current) barRef.current.style.height = `${barHRef.current * 100}%`
       animRef.current = requestAnimationFrame(anim)
     }
     animRef.current = requestAnimationFrame(anim)
@@ -1574,7 +1703,7 @@ function WaveGame({ color, onComplete }: { color: MissionColorScheme; onComplete
 
   const detect = () => {
     cancelAnimationFrame(animRef.current); setRunning(false)
-    if (barH > 0.78) { onComplete(); return }
+    if (barHRef.current > 0.78) { onComplete(); return }
     setMissed(true)
   }
 
@@ -1588,8 +1717,8 @@ function WaveGame({ color, onComplete }: { color: MissionColorScheme; onComplete
           <div className="absolute left-0 right-0 h-px pointer-events-none"
             style={{ top: '22%', background: 'rgba(52,211,153,0.28)' }} />
           <span className="absolute right-2 font-display text-[0.37rem] tracking-widest text-accent-emerald/30 pointer-events-none" style={{ top: '20%' }}>PICO</span>
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-5 rounded-t-sm"
-            style={{ height: `${barH * 100}%`, background: `rgba(52,211,153,${0.28 + barH * 0.55})`, boxShadow: barH > 0.78 ? '0 0 18px rgba(52,211,153,0.55)' : 'none', transition: 'none' }} />
+          <div ref={barRef} className="absolute bottom-0 left-1/2 -translate-x-1/2 w-5 rounded-t-sm"
+            style={{ height: `${barHRef.current * 100}%`, background: `rgba(52,211,153,${0.28 + barHRef.current * 0.55})`, boxShadow: barHRef.current > 0.78 ? '0 0 18px rgba(52,211,153,0.55)' : 'none', transition: 'none' }} />
         </div>
       )}
       {missed && <p className="font-display text-[0.42rem] tracking-[2px] text-red-400/60 text-center">✕ SEÑAL DÉBIL — REINICIA</p>}
@@ -1819,7 +1948,7 @@ export function MissionsSection() {
 
   return (
     <section id="misiones" className="relative z-[1] pt-40 pb-24">
-      <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12">
+      <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12 lg:pl-[136px]">
 
         <FadeUp className="text-center mb-4">
           <ZoneLabel text="CENTRO DE CONTROL" />
@@ -1901,7 +2030,7 @@ export function Footer() {
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[320px] h-px"
         style={{ background: 'linear-gradient(90deg, transparent, rgba(110,231,255,0.18), transparent)' }} />
 
-      <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12 flex flex-col items-center gap-12">
+      <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12 lg:pl-[136px] flex flex-col items-center gap-12">
 
         {/* Wordmark */}
         <div className="text-center">

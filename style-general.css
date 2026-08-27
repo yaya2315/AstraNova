@@ -320,7 +320,8 @@ body.ls-pre #premium-bg {
   overflow-y: auto;
   overflow-x: hidden;
   transform-origin: center center;
-  will-change: transform, opacity, filter;
+  contain: layout paint;
+  will-change: transform, opacity;
   /* Línea base antes de que DeepNavEngine aplique el z-index real por bucket
      (ver BUCKET_Z) — evita z-index:auto (orden de DOM) en el primer frame. */
   z-index: 1;

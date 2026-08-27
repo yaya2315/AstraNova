@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Prueba — motor de misiones (Fase 1)</title>
+<link rel="stylesheet" href="/misiones/estilos-misiones.css" />
+<style>
+  body { background:#0a0a12; color:#fff; font-family: system-ui, sans-serif; padding: 2rem; }
+  button { min-height:44px; padding: .75rem 1.5rem; border-radius: .5rem; border:1px solid #5FD9C4; background:transparent; color:#5FD9C4; cursor:pointer; font-size:1rem; }
+  #estado { margin-top: 1rem; font-family: monospace; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h1>Arnés de prueba — motor de misiones</h1>
+  <p>Página temporal, solo para validar el motor y los juegos antes de la integración final.</p>
+  <button id="abrir">Abrir misión de prueba</button>
+  <button id="abrir-europa">Abrir Europa Clipper</button>
+  <button id="abrir-europa-accesible">Abrir Europa Clipper (modo accesible)</button>
+  <button id="abrir-webb-n1">Abrir Webb (N1)</button>
+  <button id="abrir-webb-n2">Abrir Webb (N2)</button>
+  <button id="abrir-webb-n3">Abrir Webb (N3)</button>
+  <button id="abrir-webb-accesible">Abrir Webb (modo accesible)</button>
+  <button id="abrir-dragonfly-n1">Abrir Dragonfly (N1)</button>
+  <button id="abrir-dragonfly-n2">Abrir Dragonfly (N2)</button>
+  <button id="abrir-dragonfly-n3">Abrir Dragonfly (N3)</button>
+  <button id="abrir-parker-n1">Abrir Parker (N1)</button>
+  <button id="abrir-parker-n2">Abrir Parker (N2)</button>
+  <button id="abrir-parker-n3">Abrir Parker (N3)</button>
+  <button id="abrir-lisa-n1">Abrir LISA (N1)</button>
+  <button id="abrir-lisa-n2">Abrir LISA (N2)</button>
+  <button id="abrir-lisa-n3">Abrir LISA (N3)</button>
+  <button id="abrir-voyager-n1">Abrir Voyager (N1)</button>
+  <button id="abrir-voyager-n2">Abrir Voyager (N2)</button>
+  <button id="abrir-voyager-n3">Abrir Voyager (N3)</button>
+  <div id="estado"></div>
+
+  <script type="module">
+    import { registrarMision, abrirMision, _misionActivaId } from '/misiones/motor-misiones.js'
+    import { _estadoInterno } from '/misiones/nucleo/bucle-animacion.js'
+
+    registrarMision('prueba', () => import('/misiones/juegos/_prueba.js'))
+    registrarMision('europa', () => import('/misiones/juegos/mision-europa-senales.js'))
+    registrarMision('webb', () => import('/misiones/juegos/mision-webb-espejos.js'))
+    registrarMision('dragonfly', () => import('/misiones/juegos/mision-dragonfly-vuelo.js'))
+    registrarMision('parker', () => import('/misiones/juegos/mision-parker-escudo.js'))
+    registrarMision('lisa', () => import('/misiones/juegos/mision-lisa-vuelolibre.js'))
+    registrarMision('voyager', () => import('/misiones/juegos/mision-voyager-transmision.js'))
+
+    document.getElementById('abrir').addEventListener('click', () => {
+      abrirMision('prueba')
+    })
+    document.getElementById('abrir-europa').addEventListener('click', () => {
+      abrirMision('europa', { dificultad: 1, modoAccesible: false, semilla: 42 })
+    })
+    document.getElementById('abrir-europa-accesible').addEventListener('click', () => {
+      abrirMision('europa', { dificultad: 2, modoAccesible: true, semilla: 42 })
+    })
+    document.getElementById('abrir-webb-n1').addEventListener('click', () => {
+      abrirMision('webb', { dificultad: 1, modoAccesible: false, semilla: 7 })
+    })
+    document.getElementById('abrir-webb-n2').addEventListener('click', () => {
+      abrirMision('webb', { dificultad: 2, modoAccesible: false, semilla: 7 })
+    })
+    document.getElementById('abrir-webb-n3').addEventListener('click', () => {
+      abrirMision('webb', { dificultad: 3, modoAccesible: false, semilla: 7 })
+    })
+    document.getElementById('abrir-webb-accesible').addEventListener('click', () => {
+      abrirMision('webb', { dificultad: 2, modoAccesible: true, semilla: 7 })
+    })
+    document.getElementById('abrir-dragonfly-n1').addEventListener('click', () => {
+      abrirMision('dragonfly', { dificultad: 1, modoAccesible: false, semilla: 11 })
+    })
+    document.getElementById('abrir-dragonfly-n2').addEventListener('click', () => {
+      abrirMision('dragonfly', { dificultad: 2, modoAccesible: false, semilla: 11 })
+    })
+    document.getElementById('abrir-dragonfly-n3').addEventListener('click', () => {
+      abrirMision('dragonfly', { dificultad: 3, modoAccesible: false, semilla: 11 })
+    })
+    document.getElementById('abrir-parker-n1').addEventListener('click', () => {
+      abrirMision('parker', { dificultad: 1, modoAccesible: false, semilla: 5 })
+    })
+    document.getElementById('abrir-parker-n2').addEventListener('click', () => {
+      abrirMision('parker', { dificultad: 2, modoAccesible: false, semilla: 5 })
+    })
+    document.getElementById('abrir-parker-n3').addEventListener('click', () => {
+      abrirMision('parker', { dificultad: 3, modoAccesible: false, semilla: 5 })
+    })
+    document.getElementById('abrir-lisa-n1').addEventListener('click', () => {
+      abrirMision('lisa', { dificultad: 1, modoAccesible: false, semilla: 9 })
+    })
+    document.getElementById('abrir-lisa-n2').addEventListener('click', () => {
+      abrirMision('lisa', { dificultad: 2, modoAccesible: false, semilla: 9 })
+    })
+    document.getElementById('abrir-lisa-n3').addEventListener('click', () => {
+      abrirMision('lisa', { dificultad: 3, modoAccesible: false, semilla: 9 })
+    })
+    document.getElementById('abrir-voyager-n1').addEventListener('click', () => {
+      abrirMision('voyager', { dificultad: 1, modoAccesible: false, semilla: 13 })
+    })
+    document.getElementById('abrir-voyager-n2').addEventListener('click', () => {
+      abrirMision('voyager', { dificultad: 2, modoAccesible: false, semilla: 13 })
+    })
+    document.getElementById('abrir-voyager-n3').addEventListener('click', () => {
+      abrirMision('voyager', { dificultad: 3, modoAccesible: false, semilla: 13 })
+    })
+
+    const estado = document.getElementById('estado')
+    setInterval(() => {
+      estado.textContent =
+        `misión activa: ${_misionActivaId()}\n` +
+        `bucle: ${JSON.stringify(_estadoInterno())}`
+    }, 500)
+  </script>
+</body>
+</html>

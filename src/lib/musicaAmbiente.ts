@@ -4,16 +4,24 @@
 // audio-mision.js). No es un loop fijo: es un motor generativo que va
 // evolucionando solo, así nunca se nota "el corte donde vuelve a empezar".
 //
+// Estética: pads sostenidos tipo órgano/coro, catedral de reverb bien
+// larga y armonía que se mueve despacio — un mood amplio y solemne,
+// pensado para sentarse cómodo debajo del resto del sitio sin apurar nada.
+//
 // Capas, de abajo hacia arriba:
-//   1. Drone  — dos senoidales graves fijas (pedal), el "piso" del sonido.
-//   2. Pads   — un acorde sostenido que va cambiando cada 40-65s con un
-//               crossfade largo (ciclo i–VI–III–VII, el clásico progresión
-//               "cinemática" en La menor: Am9 → Fmaj9 → Cmaj9 → Gadd9).
+//   1. Drone  — pedal grave fijo (dos fundamentales + un sub una octava
+//               abajo), el "piso" del sonido.
+//   2. Pads   — un acorde sostenido tipo órgano (fundamental + octava)
+//               que va cambiando cada 55-85s con un crossfade largo y
+//               attack lento (ciclo i–VI–III–VII, la progresión
+//               "cinemática" clásica en La menor: Am9 → Fmaj9 → Cmaj9 → Gadd9).
 //   3. Brillos — notas sueltas y espaciadas, agudas y cortas, tomadas del
 //               acorde actual — la sensación de "estrellas titilando".
 //   4. Aire   — ruido filtrado, muy grave y muy bajo en volumen, textura.
-// Todo pasa por un reverb simple (delays en paralelo con feedback filtrado)
-// para dar sensación de espacio sin necesitar un archivo de impulso.
+//   5. Pulso  — un latido grave y sordo, muy espaciado, tensión contenida.
+// Todo pasa por una reverb de cola larga (delays en paralelo con feedback
+// filtrado) para dar sensación de espacio inmenso sin necesitar un
+// archivo de impulso.
 
 type Acorde = { nombre: string; parciales: number[] }
 
@@ -74,22 +82,34 @@ function construirGrafo(contexto: AudioContext) {
   const limpiezas: Array<() => void> = []
   const master = contexto.createGain()
   master.gain.value = 0
-  master.connect(contexto.destination)
+  // Limitador de picos: con la reverb más grande y las capas nuevas (sub,
+  // pulso, octava del pad) la suma de todo puede pasarse de 0dB en los
+  // picos — este compresor actúa solo como red de seguridad, no como
+  // efecto de sonido.
+  const limitador = contexto.createDynamicsCompressor()
+  limitador.threshold.value = -6
+  limitador.knee.value = 0
+  limitador.ratio.value = 20
+  limitador.attack.value = .003
+  limitador.release.value = .25
+  master.connect(limitador).connect(contexto.destination)
 
-  // ── Bus de reverb: tres delays en paralelo con feedback filtrado ───────
+  // ── Bus de reverb: cinco delays en paralelo con feedback filtrado ──────
+  // Cola larga y oscura (tipo "catedral") en vez de la reverb corta de
+  // antes — es lo que le da esa sensación de espacio inmenso y solemne.
   const envioReverbo = contexto.createGain()
-  envioReverbo.gain.value = .55
+  envioReverbo.gain.value = .7
   const retornoReverbo = contexto.createGain()
-  retornoReverbo.gain.value = .5
+  retornoReverbo.gain.value = .78
   retornoReverbo.connect(master)
-  for (const tiempo of [.29, .41, .53]) {
-    const delay = contexto.createDelay(1)
+  for (const tiempo of [.31, .47, .64, .87, 1.15]) {
+    const delay = contexto.createDelay(2)
     delay.delayTime.value = tiempo
     const feedback = contexto.createGain()
-    feedback.gain.value = .34
+    feedback.gain.value = .48
     const filtro = contexto.createBiquadFilter()
     filtro.type = 'lowpass'
-    filtro.frequency.value = 1800
+    filtro.frequency.value = 1500
     envioReverbo.connect(delay)
     delay.connect(filtro)
     filtro.connect(feedback)
@@ -98,7 +118,7 @@ function construirGrafo(contexto: AudioContext) {
   }
 
   const salidaDirecta = contexto.createGain()
-  salidaDirecta.gain.value = .7
+  salidaDirecta.gain.value = .85
   salidaDirecta.connect(master)
 
   function conectarFuente(nodo: AudioNode, nivelSeco = 1, nivelReverbo = 1) {
@@ -119,7 +139,7 @@ function construirGrafo(contexto: AudioContext) {
 
   const gananciaDrone = contexto.createGain()
   gananciaDrone.gain.value = 0
-  gananciaDrone.gain.setTargetAtTime(.16, contexto.currentTime + .5, 3)
+  gananciaDrone.gain.setTargetAtTime(.26, contexto.currentTime + .3, 1.4)
   filtroDrone.connect(gananciaDrone)
   conectarFuente(gananciaDrone, .8, .5)
 
@@ -134,6 +154,19 @@ function construirGrafo(contexto: AudioContext) {
       limpiezas.push(() => { try { osc.stop() } catch { /* noop */ } osc.disconnect() })
     }
   }
+  // Sub grave (una octava abajo del pedal): peso y gravedad, casi
+  // imperceptible como nota, se siente más de lo que se escucha.
+  {
+    const osc = contexto.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.value = DRONE_HZ[0] / 2
+    const ganancia = contexto.createGain()
+    ganancia.gain.value = 0
+    ganancia.gain.setTargetAtTime(.14, contexto.currentTime + .6, 2.2)
+    osc.connect(ganancia).connect(filtroDrone)
+    osc.start()
+    limpiezas.push(() => { try { osc.stop() } catch { /* noop */ } osc.disconnect(); ganancia.disconnect() })
+  }
 
   // ── Aire: ruido filtrado muy grave, textura de fondo ───────────────────
   const fuenteRuido = contexto.createBufferSource()
@@ -147,7 +180,7 @@ function construirGrafo(contexto: AudioContext) {
   limpiezas.push(quitarLfoRuido)
   const gananciaRuido = contexto.createGain()
   gananciaRuido.gain.value = 0
-  gananciaRuido.gain.setTargetAtTime(.022, contexto.currentTime + 1, 4)
+  gananciaRuido.gain.setTargetAtTime(.03, contexto.currentTime + .5, 3)
   fuenteRuido.connect(filtroRuido).connect(gananciaRuido)
   conectarFuente(gananciaRuido, .6, .8)
   fuenteRuido.start()
@@ -155,23 +188,34 @@ function construirGrafo(contexto: AudioContext) {
 
   // ── Pads: acorde sostenido, cambia con crossfade cada 40-65s ───────────
   let indiceAcorde = 0
-  let vocesActuales: { osc: OscillatorNode; ganancia: GainNode; quitarLfo: () => void }[] = []
+  let vocesActuales: { osc: OscillatorNode; octavaSuperior: OscillatorNode; ganancia: GainNode; gananciaOctava: GainNode; quitarLfo: () => void }[] = []
   let idProximoAcorde: ReturnType<typeof setTimeout> | null = null
   let detenido = false
 
   function iniciarAcorde(acorde: Acorde) {
     const nuevasVoces = acorde.parciales.map((hz, i) => {
+      // Cada voz es un par (fundamental + una octava arriba, más floja) en
+      // vez de un solo oscilador — así el pad suena a tubos de órgano en
+      // vez de a un synth simple, sin dejar de ser 100% generado.
       const osc = contexto.createOscillator()
       osc.type = i === 0 ? 'triangle' : 'sine'
       osc.frequency.value = hz
+      const octavaSuperior = contexto.createOscillator()
+      octavaSuperior.type = 'sine'
+      octavaSuperior.frequency.value = hz * 2
+      const gananciaOctava = contexto.createGain()
+      gananciaOctava.gain.value = .18
       const ganancia = contexto.createGain()
       ganancia.gain.value = 0
-      const quitarLfo = crearLFO(contexto, ganancia.gain, .06 + i * .015, .012, i * .7)
+      const quitarLfo = crearLFO(contexto, ganancia.gain, .045 + i * .011, .012, i * .7)
       osc.connect(ganancia)
-      conectarFuente(ganancia, .55, .85)
+      octavaSuperior.connect(gananciaOctava).connect(ganancia)
+      conectarFuente(ganancia, .55, .95)
       osc.start()
-      ganancia.gain.setTargetAtTime(.05, contexto.currentTime + .3, 4)
-      return { osc, ganancia, quitarLfo }
+      octavaSuperior.start()
+      // Attack largo (4s): entrada de órgano/coro, no de synth pad rápido.
+      ganancia.gain.setTargetAtTime(.085, contexto.currentTime + .3, 4)
+      return { osc, octavaSuperior, ganancia, gananciaOctava, quitarLfo }
     })
     const vocesViejas = vocesActuales
     vocesActuales = nuevasVoces
@@ -179,9 +223,13 @@ function construirGrafo(contexto: AudioContext) {
       for (const voz of vocesViejas) {
         voz.ganancia.gain.setTargetAtTime(0, contexto.currentTime, 3)
         const oscAGuardar = voz.osc
+        const octavaAGuardar = voz.octavaSuperior
         setTimeout(() => {
           try { oscAGuardar.stop() } catch { /* noop */ }
+          try { octavaAGuardar.stop() } catch { /* noop */ }
           oscAGuardar.disconnect()
+          octavaAGuardar.disconnect()
+          voz.gananciaOctava.disconnect()
           voz.ganancia.disconnect()
           voz.quitarLfo()
         }, 12000)
@@ -190,7 +238,9 @@ function construirGrafo(contexto: AudioContext) {
   }
 
   function programarProximoAcorde() {
-    const esperaMs = (40 + Math.random() * 25) * 1000
+    // Ciclo más lento (55-85s en vez de 40-65s): la armonía se mueve
+    // como en un edit "slowed" — vasto y sin apuro.
+    const esperaMs = (55 + Math.random() * 30) * 1000
     idProximoAcorde = setTimeout(() => {
       if (detenido) return
       indiceAcorde = (indiceAcorde + 1) % ACORDES.length
@@ -207,7 +257,10 @@ function construirGrafo(contexto: AudioContext) {
     if (idProximoAcorde) clearTimeout(idProximoAcorde)
     for (const voz of vocesActuales) {
       try { voz.osc.stop() } catch { /* noop */ }
+      try { voz.octavaSuperior.stop() } catch { /* noop */ }
       voz.osc.disconnect()
+      voz.octavaSuperior.disconnect()
+      voz.gananciaOctava.disconnect()
       voz.ganancia.disconnect()
       voz.quitarLfo()
     }
@@ -242,7 +295,7 @@ function construirGrafo(contexto: AudioContext) {
     conectarFuente(panorama, .5, 1.1)
 
     const ahora = contexto.currentTime
-    const pico = .05 + Math.random() * .03
+    const pico = .08 + Math.random() * .05
     ganancia.gain.linearRampToValueAtTime(pico, ahora + .02)
     ganancia.gain.setTargetAtTime(0, ahora + .05, 1.4)
 
@@ -271,8 +324,50 @@ function construirGrafo(contexto: AudioContext) {
     if (idProximoBrillo) clearTimeout(idProximoBrillo)
   })
 
+  // ── Pulso: un latido grave y suave, muy espaciado ──────────────────────
+  // Un solo golpe corto y sordo cada dos compases imaginarios — le da
+  // tensión contenida y sensación de avance sin volverse percusión.
+  let idProximoPulso: ReturnType<typeof setTimeout> | null = null
+  let detenidoPulso = false
+
+  function tocarPulso() {
+    const osc = contexto.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.value = 48
+    const ganancia = contexto.createGain()
+    ganancia.gain.value = 0
+    osc.connect(ganancia)
+    conectarFuente(ganancia, .9, .4)
+
+    const ahora = contexto.currentTime
+    ganancia.gain.linearRampToValueAtTime(.16, ahora + .05)
+    ganancia.gain.setTargetAtTime(0, ahora + .09, .5)
+
+    osc.start()
+    osc.stop(ahora + 3)
+    setTimeout(() => { osc.disconnect(); ganancia.disconnect() }, 3200)
+  }
+
+  function programarProximoPulso() {
+    const esperaMs = (7 + Math.random() * 3) * 1000
+    idProximoPulso = setTimeout(() => {
+      if (detenidoPulso) return
+      tocarPulso()
+      programarProximoPulso()
+    }, esperaMs)
+  }
+  programarProximoPulso()
+
+  limpiezas.push(() => {
+    detenidoPulso = true
+    if (idProximoPulso) clearTimeout(idProximoPulso)
+  })
+
   // ── fade-in del master ──────────────────────────────────────────────────
-  master.gain.setTargetAtTime(.55, contexto.currentTime + .1, 2.5)
+  // Tau corto (1.2s): a los ~3-4s ya se escucha claro, así al probarlo no
+  // da la sensación de "no pasó nada" mientras el resto de las capas
+  // (que tienen su propio fade-in más largo) siguen entrando de a poco.
+  master.gain.setTargetAtTime(.85, contexto.currentTime + .05, 1.2)
 
   return {
     master,

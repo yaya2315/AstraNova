@@ -53,8 +53,7 @@ Astra Nova t-box/
 ├── tailwind.config.ts          [TS] Configuración de Tailwind CSS (utilidades de estilo)
 ├── tsconfig.json               [JSON] Configuración de TypeScript (lenguaje)
 ├── package.json                [JSON] Lista de dependencias y scripts del proyecto
-├── scripts/postbuild.mjs       [MJS] Corre después de cada build: renombra el HTML/CSS reales a rey.html/rey.css
-│                                     y deja copias de referencia en web/ (afuera de out/)
+├── .github/workflows/deploy.yml [YML] Build + publicación automática a GitHub Pages en cada push a main
 └── documentacion/ESTRUCTURA.md ← Este archivo
 ```
 

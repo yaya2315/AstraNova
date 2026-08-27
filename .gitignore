@@ -1,4 +1,12 @@
 node_modules/
 .next/
+out/
+web/
 *.log
 tsconfig.tsbuildinfo
+
+# Editor / entorno local — no forman parte del sitio
+.vscode/
+.claude/
+.DS_Store
+Thumbs.db

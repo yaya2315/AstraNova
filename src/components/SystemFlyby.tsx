@@ -114,9 +114,28 @@ function Galaxies() {
 /* ====== CABINA (primera persona) — morro del cohete, apenas asoma en el borde
    inferior del cuadro. Chico y lejano a propósito: da referencia de escala sin
    tapar la vista, y hace que la nave se sienta pequeña frente a cualquier planeta. */
+/* Aleta — perfil barrido (no una simple caja) extrudado con un poco de
+   espesor, para que la silueta se lea como una pieza diseñada. */
+function useFinGeometry() {
+  return useMemo(() => {
+    const forma = new THREE.Shape()
+    forma.moveTo(0, 0.02)
+    forma.lineTo(0.34, -0.06)
+    forma.lineTo(0.31, -0.24)
+    forma.lineTo(0.07, -0.3)
+    forma.lineTo(0, -0.14)
+    forma.closePath()
+    const geo = new THREE.ExtrudeGeometry(forma, { depth: 0.026, bevelEnabled: false })
+    geo.center()
+    return geo
+  }, [])
+}
+
 function Cockpit() {
   const groupRef = useRef<THREE.Group>(null!)
   const { camera } = useThree()
+  const finGeo = useFinGeometry()
+  const posicionesAletas = useMemo(() => [0, 120, 240].map(deg => (deg * Math.PI) / 180), [])
 
   useFrame(() => {
     groupRef.current.position.copy(camera.position)
@@ -125,20 +144,85 @@ function Cockpit() {
 
   return (
     <group ref={groupRef}>
-      <group position={[0, -0.7, -2.8]} rotation={[Math.PI / 2 + 0.18, 0, 0]} scale={0.3}>
-        <mesh>
-          <coneGeometry args={[0.3, 1.3, 16]} />
-          <meshStandardMaterial color="#d4d6da" metalness={0.6} roughness={0.35} />
+      {/* Rotación negativa (antes positiva): con +θ la punta del cono quedaba
+          más cerca de la cámara que los motores — el cohete "miraba" al
+          jugador en vez de apuntar hacia adelante. Invertir el signo conserva
+          la misma inclinación vertical (cos es par) pero manda la punta lejos
+          de la cámara y los motores cerca, como corresponde en vista 1ª persona. */}
+      <group position={[0, -0.7, -2.8]} rotation={[-(Math.PI / 2 + 0.18), 0, 0]} scale={0.3}>
+        {/* Punta — cono afilado */}
+        <mesh position={[0, 1.0, 0]}>
+          <coneGeometry args={[0.16, 0.4, 20]} />
+          <meshStandardMaterial color="#eef0f4" metalness={0.75} roughness={0.2} />
         </mesh>
-        <mesh position={[0, -0.35, 0]}>
-          <cylinderGeometry args={[0.3, 0.32, 0.3, 16]} />
-          <meshStandardMaterial color="#8a8f96" metalness={0.5} roughness={0.4} />
+
+        {/* Hombro — pasa de la punta al ancho del fuselaje */}
+        <mesh position={[0, 0.68, 0]}>
+          <cylinderGeometry args={[0.16, 0.24, 0.24, 20]} />
+          <meshStandardMaterial color="#dcdfe4" metalness={0.65} roughness={0.3} />
         </mesh>
-        {[0.85, -0.85].map((rot, i) => (
-          <mesh key={i} position={[Math.sin(rot) * 0.32, -0.5, Math.cos(rot) * 0.32]} rotation={[0, -rot, 0]}>
-            <boxGeometry args={[0.04, 0.4, 0.32]} />
-            <meshStandardMaterial color="#a03030" metalness={0.3} roughness={0.5} />
+
+        {/* Anillo de acento — el cian del sitio, marca la unión punta/cuerpo */}
+        <mesh position={[0, 0.555, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.243, 0.007, 8, 24]} />
+          <meshStandardMaterial color="#00F0FF" emissive="#00F0FF" emissiveIntensity={1.4} roughness={0.4} />
+        </mesh>
+
+        {/* Sensor frontal — un "ojo" pequeño, no una ventana de cabina */}
+        <mesh position={[0, 0.5, 0.19]}>
+          <sphereGeometry args={[0.032, 12, 12]} />
+          <meshStandardMaterial color="#062a30" emissive="#00F0FF" emissiveIntensity={0.9} roughness={0.3} />
+        </mesh>
+
+        {/* Fuselaje — segmento principal con dos líneas de panel finas */}
+        <mesh position={[0, 0.32, 0]}>
+          <cylinderGeometry args={[0.24, 0.24, 0.42, 20]} />
+          <meshStandardMaterial color="#9aa0a8" metalness={0.55} roughness={0.4} />
+        </mesh>
+        {[0.44, 0.2].map((y, i) => (
+          <mesh key={i} position={[0, y, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.2405, 0.0035, 6, 20]} />
+            <meshStandardMaterial color="#565b61" metalness={0.4} roughness={0.6} />
           </mesh>
+        ))}
+
+        {/* Cuerpo trasero — se angosta hacia la falda de motores */}
+        <mesh position={[0, 0.02, 0]}>
+          <cylinderGeometry args={[0.24, 0.2, 0.2, 20]} />
+          <meshStandardMaterial color="#83898f" metalness={0.5} roughness={0.45} />
+        </mesh>
+
+        {/* Falda — se abre justo antes de los motores, como en un cohete real */}
+        <mesh position={[0, -0.13, 0]}>
+          <cylinderGeometry args={[0.2, 0.27, 0.13, 20]} />
+          <meshStandardMaterial color="#6a6f75" metalness={0.55} roughness={0.4} />
+        </mesh>
+
+        {/* Aletas — tres, barridas, con un filo cian fino */}
+        {posicionesAletas.map((rad, i) => (
+          <group key={i} position={[Math.sin(rad) * 0.235, -0.19, Math.cos(rad) * 0.235]} rotation={[0, -rad, 0]}>
+            <mesh geometry={finGeo}>
+              <meshStandardMaterial color="#8a2b2b" metalness={0.3} roughness={0.5} />
+            </mesh>
+            <mesh position={[0, -0.04, 0.014]}>
+              <boxGeometry args={[0.22, 0.012, 0.004]} />
+              <meshStandardMaterial color="#00F0FF" emissive="#00F0FF" emissiveIntensity={0.8} />
+            </mesh>
+          </group>
+        ))}
+
+        {/* Motores — tres toberas con resplandor de escape */}
+        {posicionesAletas.map((rad, i) => (
+          <group key={i} position={[Math.sin(rad) * 0.11, -0.27, Math.cos(rad) * 0.11]}>
+            <mesh>
+              <cylinderGeometry args={[0.055, 0.075, 0.16, 14]} />
+              <meshStandardMaterial color="#2b2d31" metalness={0.7} roughness={0.35} />
+            </mesh>
+            <mesh position={[0, -0.09, 0]} rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[0.055, 0.012, 8, 16]} />
+              <meshStandardMaterial color="#ff8a3d" emissive="#ff8a3d" emissiveIntensity={2} />
+            </mesh>
+          </group>
         ))}
       </group>
     </group>

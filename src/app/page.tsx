@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import LoadingScreen from '@/components/LoadingScreen'
@@ -20,15 +20,23 @@ import {
   Footer,
 } from '@/components/Sections'
 
-const SolarSystem = dynamic(() => import('@/components/SolarSystem'), {
-  ssr: false,
-  loading: () => (
+// Placeholder con el mismo tamaño exacto del sistema solar real — se usa
+// tanto mientras carga el chunk de Three.js (loading: de dynamic) como
+// mientras esperamos a que convenga empezar a cargarlo (ver showSolar en
+// LayerStack más abajo), para que nunca haya salto de layout.
+function SolarSystemFallback() {
+  return (
     <div className="w-full h-[440px] sm:h-[560px] md:h-[680px] lg:h-[800px] rounded-2xl overflow-hidden flex items-center justify-center bg-space-800/30">
       <div className="font-display text-sm tracking-[4px] text-slate-500 animate-pulse">
         CARGANDO SISTEMA SOLAR...
       </div>
     </div>
-  ),
+  )
+}
+
+const SolarSystem = dynamic(() => import('@/components/SolarSystem'), {
+  ssr: false,
+  loading: SolarSystemFallback,
 })
 
 // ── Barra de navegación superior (visible en viewports < lg) ─────────────────
@@ -283,6 +291,33 @@ function DivePortal() {
 //   2. Añadir un <div id="layer-N" className="deep-layer"> aquí
 //   3. Añadir su label al array `labels` en DivePortal (arriba)
 function LayerStack() {
+  const { depth } = useDeepNav()
+  // El sistema solar (Three.js + 6 texturas de planetas + sol) es, con
+  // diferencia, lo más pesado del sitio. Antes se montaba igual que las
+  // demás capas — dentro del stack desde el primer render — así que sus
+  // texturas empezaban a bajar apenas cargaba la página, compitiendo con
+  // el Hero por ancho de banda aunque el usuario nunca llegara a esa capa.
+  // Ahora esperamos a que el navegador esté ocioso (o a que el usuario ya
+  // esté ahí, lo que pase primero) antes de montarlo. Una vez montado se
+  // queda así — no se desmonta al salir de la capa — para que volver a
+  // entrar sea instantáneo.
+  const [showSolar, setShowSolar] = useState(false)
+  useEffect(() => {
+    if (showSolar) return
+    if (depth >= 1) { setShowSolar(true); return }
+    type IdleWindow = Window & {
+      requestIdleCallback?: (cb: () => void) => number
+      cancelIdleCallback?: (id: number) => void
+    }
+    const w = window as IdleWindow
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(() => setShowSolar(true))
+      return () => w.cancelIdleCallback?.(id)
+    }
+    const id = window.setTimeout(() => setShowSolar(true), 1500)
+    return () => clearTimeout(id)
+  }, [depth, showSolar])
+
   return (
     <div id="deep-stack">
 
@@ -294,7 +329,7 @@ function LayerStack() {
       {/* ── Capa 1 — Sistema Solar ──────────────────────────────────────── */}
       <div id="layer-1" className="deep-layer" aria-label="Sistema Solar">
         <section id="sistema-solar" className="relative z-[1] py-20">
-          <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12">
+          <div className="max-w-[1320px] mx-auto px-6 sm:px-8 md:px-12 lg:pl-[136px]">
             <div className="text-center">
               <div className="section-label">EXPLORACIÓN INTERACTIVA</div>
             </div>
@@ -306,8 +341,8 @@ function LayerStack() {
               pasa el cursor sobre cualquier planeta para descubrir sus secretos.
             </p>
           </div>
-          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 md:px-10">
-            <SolarSystem />
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 md:px-10 lg:pl-[136px]">
+            {showSolar ? <SolarSystem /> : <SolarSystemFallback />}
           </div>
         </section>
       </div>

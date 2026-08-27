@@ -19,34 +19,26 @@ Ver [documentacion/ESTRUCTURA.md](documentacion/ESTRUCTURA.md) para el detalle c
 
 ```
 npm run dev     # servidor de desarrollo (Turbopack)
-npm run build   # genera el HTML/CSS/JS estático en out/
-npm run start   # sirve la carpeta out/ ya generada
+npm run build   # genera el sitio estático en out/ (index.html, _next/, texturas...)
+npm run start   # sirve out/ en http://localhost:3000 para previsualizar antes de publicar
 ```
 
-## Abrir la versión independiente (HTML/CSS/JS) en VS Code
+`npm run build` compila todo el código React/Three.js a **HTML, CSS y JS reales** dentro de [`out/`](out) — un sitio 100% estático, sin necesidad de Node ni de un servidor especial para funcionar. `out/index.html` es el archivo real que sirve el sitio (no hace falta renombrarlo ni usar un servidor a medida para que cargue).
 
-`npm run build` compila todo el código React/Three.js a archivos **HTML, CSS y JS reales** dentro de la carpeta [`out/`](out) — no necesita Node ni Next.js corriendo para verse, solo un servidor estático (los `<script>` usan rutas absolutas tipo `/_next/...`, por eso no se puede abrir `out/rey.html` con doble clic directo desde el explorador de archivos).
+## Publicar el sitio
 
-Formas de abrirlo fácil en VS Code:
+### GitHub Pages (automático)
 
-1. **Extensión "Live Server"** (recomendado): clic derecho sobre `out/rey.html` → *Open with Live Server*.
-2. **Terminal integrada de VS Code**: `npm run start` y abrir `http://localhost:3000` (resuelve solo a `rey.html` gracias a `out/serve.json`).
+El repo ya incluye `.github/workflows/deploy.yml`. Al hacer push a `main`:
 
-Cada vez que cambies algo en `src/`, corré `npm run build` de nuevo para regenerar `out/` con los cambios.
+1. Activá Pages una sola vez: **Settings → Pages → Source: GitHub Actions**.
+2. Cada push a `main` corre el build y publica `out/` automáticamente.
+3. El workflow detecta solo si el sitio queda en la raíz (repo `tu-usuario.github.io`) o en una subcarpeta (`tu-usuario.github.io/nombre-repo/`) y ajusta las rutas de texturas y scripts (`NEXT_PUBLIC_BASE_PATH`) para que carguen bien en cualquiera de los dos casos.
 
-### El HTML y el CSS "rey" (el real) — y por qué el JS no tiene uno solo
+### Vercel / Netlify / dominio propio
 
-De todos los archivos que genera el build, **solo hay un HTML real y un CSS real** — por eso `npm run build` los renombra automáticamente a algo identificable:
+Cualquiera de los dos detecta Next.js solo: conectá el repo y usá `npm run build` con carpeta de salida `out`. No hace falta configurar nada más — el sitio queda en la raíz del dominio.
 
-- `out/rey.html` — el HTML que de verdad sirve el sitio (antes `index.html`).
-- `out/_next/static/css/rey.css` — el único CSS real (antes tenía un nombre hasheado tipo `cc1f4c03966b144a.css`).
+### Subir la carpeta `out/` a mano
 
-El **JS no tiene un único "rey"**: Next.js separa el código en 19 archivos a propósito (carga más rápido, cada sección pesada como el sistema solar 3D se descarga solo cuando el usuario navega ahí). El archivo que carga y coordina a todos los demás es `webpack-*.js` (el runtime de módulos) — es lo más parecido a un "JS rey" conceptualmente, pero **no se puede renombrar**: tiene el mapeo `nombre de chunk → archivo` grabado adentro, y los otros 18 archivos están referenciados desde ahí. Ya se probó forzar esto (ver historial de commits) y rompió el build por completo.
-
-Además, cada `npm run build` deja copias de referencia dentro de **`web/`** en la raíz del proyecto (afuera de `out/`) — todas juntas en una sola carpeta en vez de sueltas, para no ensuciar la raíz junto a `package.json`, `src/`, etc.:
-
-- `web/rey.html` — copia del HTML real.
-- `web/rey.css` — copia del CSS real.
-- `web/js/` — los 19 archivos JS reales, tal cual, sin subcarpetas.
-
-Son copias de solo lectura para inspeccionar o abrir rápido en el editor — **no son un sitio funcional por sí solas** (el `rey.html` de `web/` sigue apuntando a `/_next/...`, que solo existe dentro de `out/`). Para ver el sitio corriendo de verdad, seguí usando `out/` (Live Server sobre `out/rey.html`, o `npm run start`). Editar `web/js/`, `web/rey.css` o `web/rey.html` no cambia nada — hay que editar `src/` y volver a correr `npm run build`.
+También sirve para Cloudflare Pages, un hosting compartido, o cualquier CDN: corré `npm run build` y subí el contenido de `out/` tal cual. Si el sitio no queda en la raíz del dominio (por ejemplo `midominio.com/astra/`), definí `NEXT_PUBLIC_BASE_PATH=/astra` antes de buildear.

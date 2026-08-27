@@ -57,9 +57,9 @@ const BUCKET_STYLE: Record<Bucket, { z: number; y: number; scale: number; rotate
   // solo se hace visible mientras se anima hacia/desde "active" (el propio
   // animate() interpola opacity 0→1 durante esa transición). Position/rotate
   // quedan listos para cuando le toque entrar, pero no hay peek permanente.
-  'peek-1': { z: -150, y: 20, scale: 0.97, rotateX: 10, rotateZ: -2, opacity: 0,    filter: 'blur(12px)' },
-  'peek-2': { z: -300, y: 40, scale: 0.94, rotateX: 16, rotateZ: -4, opacity: 0.15, filter: 'blur(12px)' },
-  hidden:   { z: -450, y: 60, scale: 0.90, rotateX: 22, rotateZ: -6, opacity: 0,    filter: 'blur(12px)' },
+  'peek-1': { z: -150, y: 20, scale: 0.97, rotateX: 10, rotateZ: -2, opacity: 0,    filter: 'blur(22px)' },
+  'peek-2': { z: -300, y: 40, scale: 0.94, rotateX: 16, rotateZ: -4, opacity: 0.08, filter: 'blur(28px)' },
+  hidden:   { z: -450, y: 60, scale: 0.90, rotateX: 22, rotateZ: -6, opacity: 0,    filter: 'blur(28px)' },
 }
 
 // Transición larga y suave (1.2s con esta curva: arranca rápido, aterriza muy
@@ -159,13 +159,13 @@ export function DeepNavProvider({ children }: { children: React.ReactNode }) {
     const isPeek   = bucket === 'peek-1' || bucket === 'peek-2'
 
     el.dataset.depth = bucket
+    el.style.contentVisibility = bucket === 'hidden' ? 'hidden' : 'visible'
     if (isActive) {
       el.removeAttribute('aria-hidden')
       requestAnimationFrame(() => { el.scrollTop = 0 })
       // Un <canvas> (Three.js, mapas, etc.) montado mientras la capa estaba
       // reducida queda con el tamaño equivocado para siempre si no se le avisa.
       window.dispatchEvent(new Event('resize'))
-      setTimeout(() => window.dispatchEvent(new Event('resize')), reduced.current ? 220 : 1200)
     } else {
       el.setAttribute('aria-hidden', 'true')
     }
@@ -176,14 +176,30 @@ export function DeepNavProvider({ children }: { children: React.ReactNode }) {
     // Clic en cualquier parte de una capa que asoma → la trae al frente.
     el.onclick = isPeek ? () => goToRef.current(idx) : null
 
-    const activeFilter = isActive && overlayOpenRef.current ? 'blur(20px) brightness(0.6)' : s.filter
+    const activeFilter = isActive && overlayOpenRef.current ? 'blur(20px) brightness(0.6)' : 'none'
 
     if (reduced.current) {
       animate(el, { opacity: s.opacity }, REDUCED_TRANSITION)
+    } else if (bucket === 'hidden') {
+      // Hidden layers should not spend a frame interpolating blur/3D transforms.
+      // They are fully covered and will be animated only when they approach the
+      // active layer on a later navigation.
+      el.style.opacity = String(s.opacity)
+      el.style.transform = `translate3d(0, ${s.y}px, ${s.z}px) scale(${s.scale}) rotateX(${s.rotateX}deg) rotateZ(${s.rotateZ}deg)`
+      el.style.filter = 'none'
     } else {
+      // Bug: acá solo se animaban x/y/z/scale/rotate/opacity — el `filter`
+      // (blur) de BUCKET_STYLE nunca se pasaba a animate() salvo en el caso
+      // puntual de "activa + overlay abierto". Resultado: las capas peek-1/
+      // peek-2 nunca llegaban a desenfocarse ni en reposo ni durante la
+      // transición — por eso se leía texto nítido de fondo. Ahora el filtro
+      // real de cada bucket siempre entra en la animación (con la excepción
+      // de "activa + overlay", que sigue usando su propio blur+brightness).
+      const targetFilter = isActive && overlayOpenRef.current ? activeFilter : s.filter
       animate(
         el,
-        { x: 0, y: s.y, z: s.z, scale: s.scale, rotateX: s.rotateX, rotateZ: s.rotateZ, opacity: s.opacity, filter: activeFilter },
+        { x: 0, y: s.y, z: s.z, scale: s.scale, rotateX: s.rotateX, rotateZ: s.rotateZ, opacity: s.opacity,
+          filter: targetFilter },
         SPRING,
       )
     }

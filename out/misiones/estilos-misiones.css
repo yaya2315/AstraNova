@@ -1,0 +1,702 @@
+/* estilos-misiones.css
+   Tokens del sistema de misiones + layout del modal. Cada minijuego añade
+   sus propios estilos dentro de .mision-contenedor-juego; este archivo solo
+   define el "casco" del motor: fondo, modal, cabecera, fases, botones.
+
+   Línea de diseño: el mismo lenguaje "vidrio premium" que ya usa el resto
+   del sitio (glassmorphism con saturate, glow en dos tonos, tipografía
+   Space Grotesk para HUD/labels, Outfit itálica para las citas/datos) —
+   ver style-general.css (.card-glass, .btn-primary, .section-label). */
+
+:root {
+  --estado-acierto: #5FD9C4;
+  --estado-riesgo: #FFB865;
+  --estado-fallo: #FF8FA3;
+
+  --e-1: .25rem;
+  --e-2: .5rem;
+  --e-3: .75rem;
+  --e-4: 1rem;
+  --e-6: 1.5rem;
+  --e-8: 2rem;
+  --e-12: 3rem;
+  --e-16: 4rem;
+
+  --hud-dato: clamp(1.5rem, 1.1rem + 2vw, 2.5rem);
+  --hud-label: clamp(.625rem, .58rem + .2vw, .75rem);
+
+  --mision-font-display: 'Space Grotesk', 'Inter', sans-serif;
+  --mision-font-serif: 'Outfit', 'Inter', sans-serif;
+  --mision-vidrio: rgba(255, 255, 255, .07);
+  --mision-vidrio-borde: rgba(255, 255, 255, .09);
+}
+
+/* ── Fondo / overlay ──────────────────────────────────────────────────── */
+.mision-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--e-4);
+  background: radial-gradient(ellipse 90% 70% at 50% 40%, rgba(20, 14, 32, .55), rgba(4, 3, 8, .9) 70%);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  /* El acento de cada misión se fija acá vía JS (motor-misiones.js) y lo
+     heredan todos los elementos hijos que lo usan (borde, focos, HUD). */
+  --acento-mision: #5FD9C4;
+  animation: mision-aparecer .3s ease both;
+}
+
+@keyframes mision-aparecer {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+body.mision-abierta {
+  overflow: hidden;
+}
+
+/* ── Modal ────────────────────────────────────────────────────────────── */
+.mision-modal {
+  position: relative;
+  width: min(920px, 100%);
+  /* `height` fija (no `max-height`) a propósito: un alto que depende del
+     contenido cuenta como "indefinido" para la resolución de porcentajes
+     de los nietos (el tablero de cada juego usa `height:100%` varios
+     niveles abajo) — con solo `max-height`, un header/briefing apenas más
+     alto podía empujar esa cadena a su `min-height` de resguardo, que SÍ
+     cuenta como indefinido, y el juego se dibujaba con altura 0. */
+  height: min(760px, 100dvh - var(--e-8));
+  display: flex;
+  flex-direction: column;
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, .05), transparent 40%),
+    linear-gradient(175deg, rgba(22, 17, 32, .92), rgba(9, 7, 14, .96));
+  border: 1px solid color-mix(in srgb, var(--acento-mision) 22%, rgba(255, 255, 255, .08));
+  border-radius: var(--e-6);
+  box-shadow:
+    0 40px 100px rgba(0, 0, 0, .65),
+    0 0 90px color-mix(in srgb, var(--acento-mision) 16%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, .07);
+  outline: none;
+  overflow: hidden;
+  animation: mision-modal-aparecer .4s cubic-bezier(.22, 1, .36, 1) both;
+}
+.mision-modal::before {
+  /* Filo superior: una línea muy fina que toma el color de la misión —
+     el mismo recurso que .holo-scan usa en las tarjetas del sitio, acá
+     como un estado fijo en vez de un barrido animado. */
+  content: '';
+  position: absolute;
+  top: 0; left: 8%; right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--acento-mision) 70%, transparent), transparent);
+  pointer-events: none;
+}
+
+@keyframes mision-modal-aparecer {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.mision-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  padding: var(--e-4) var(--e-6);
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .03), transparent);
+  flex-wrap: wrap;
+}
+
+.mision-titulo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-label);
+  font-weight: 500;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--acento-mision);
+  margin: 0;
+}
+.mision-titulo::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--acento-mision));
+  flex-shrink: 0;
+}
+
+.mision-controles-header {
+  display: flex;
+  align-items: center;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+}
+.mision-controles-header > * {
+  position: relative;
+  padding-left: var(--e-4);
+}
+.mision-controles-header > *:first-child {
+  padding-left: 0;
+}
+.mision-controles-header > *::before {
+  /* Separador fino entre grupos de controles — se omite en el primero
+     con :first-child arriba, así no queda un guion suelto al principio. */
+  content: '';
+  position: absolute;
+  left: 0; top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, .08);
+}
+.mision-controles-header > *:first-child::before {
+  content: none;
+}
+
+.mision-selector-dificultad {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: calc(var(--e-2) + 3px);
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid rgba(255, 255, 255, .07);
+}
+.mision-selector-dificultad button {
+  min-width: 40px;
+  min-height: 38px;
+  padding: var(--e-1) var(--e-2);
+  border-radius: var(--e-2);
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, .5);
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-label);
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease, border-color .2s ease;
+}
+.mision-selector-dificultad button:hover {
+  color: rgba(255, 255, 255, .8);
+}
+.mision-selector-dificultad button.activo {
+  border-color: color-mix(in srgb, var(--acento-mision) 55%, transparent);
+  color: #fff;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--acento-mision) 28%, transparent), color-mix(in srgb, var(--acento-mision) 12%, transparent));
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--acento-mision) 30%, transparent);
+}
+
+.mision-toggle-accesible {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-label);
+  letter-spacing: .02em;
+  color: rgba(255, 255, 255, .6);
+  cursor: pointer;
+  min-height: 44px;
+  transition: color .2s ease;
+}
+.mision-toggle-accesible:hover { color: rgba(255, 255, 255, .85); }
+
+/* Input real, oculto pero seguible por teclado y lectores de pantalla —
+   el track+perilla de abajo son puramente decorativos (aria-hidden). */
+.mision-toggle-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.mision-toggle-pista {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .16);
+  transition: background .2s ease, border-color .2s ease;
+}
+.mision-toggle-pista::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .75);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+  transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), background .2s ease;
+}
+.mision-toggle-input:checked ~ .mision-toggle-pista {
+  background: color-mix(in srgb, var(--acento-mision) 40%, transparent);
+  border-color: var(--acento-mision);
+}
+.mision-toggle-input:checked ~ .mision-toggle-pista::after {
+  transform: translateX(14px);
+  background: #fff;
+  box-shadow: 0 1px 6px color-mix(in srgb, var(--acento-mision) 60%, transparent);
+}
+.mision-toggle-input:focus-visible ~ .mision-toggle-pista {
+  outline: 2px solid var(--acento-mision);
+  outline-offset: 2px;
+}
+
+.mision-grupo-iconos {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.mision-boton-icono,
+.mision-cerrar {
+  min-width: 40px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .1);
+  background: rgba(255, 255, 255, .04);
+  color: rgba(255, 255, 255, .7);
+  cursor: pointer;
+  transition: border-color .2s ease, color .2s ease, background .2s ease, transform .2s ease;
+}
+.mision-boton-icono svg,
+.mision-cerrar svg {
+  display: block;
+}
+.mision-boton-icono:hover,
+.mision-cerrar:hover {
+  border-color: color-mix(in srgb, var(--acento-mision) 45%, transparent);
+  color: #fff;
+  background: color-mix(in srgb, var(--acento-mision) 10%, rgba(255, 255, 255, .04));
+  transform: translateY(-1px);
+}
+.mision-boton-icono:focus-visible,
+.mision-cerrar:focus-visible,
+.mision-selector-dificultad button:focus-visible,
+.mision-boton-primario:focus-visible,
+.mision-boton-secundario:focus-visible {
+  outline: 2px solid var(--acento-mision);
+  outline-offset: 2px;
+}
+
+/* ── Cuerpo / fases ───────────────────────────────────────────────────── */
+.mision-cuerpo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mision-fase {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-4);
+  padding: var(--e-8) var(--e-6);
+  text-align: center;
+  overflow-y: auto;
+  animation: mision-fase-aparecer .45s cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes mision-fase-aparecer {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* Un author-rule con la misma especificidad que [hidden] le gana a la regla
+   nativa del navegador ([hidden]{display:none}) — sin esto, las tres fases
+   (briefing/juego/debriefing) se dibujan superpuestas todo el tiempo. */
+.mision-fase[hidden] {
+  display: none;
+}
+
+.mision-fase-juego {
+  padding: var(--e-4);
+  align-items: stretch;
+}
+.mision-contenedor-juego {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.mision-briefing-objetivo {
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-dato);
+  font-weight: 600;
+  letter-spacing: -.01em;
+  line-height: 1.25;
+  color: #fff;
+  text-shadow: 0 0 32px color-mix(in srgb, var(--acento-mision) 35%, transparent);
+  max-width: 42ch;
+  margin: 0;
+}
+.mision-briefing-dato,
+.mision-debriefing-dato {
+  position: relative;
+  font-family: var(--mision-font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(.8rem, .74rem + .3vw, .95rem);
+  line-height: 1.6;
+  color: rgba(255, 255, 255, .62);
+  max-width: 48ch;
+  margin: 0;
+  padding: var(--e-3) 0 var(--e-3) var(--e-4);
+  border-left: 2px solid color-mix(in srgb, var(--acento-mision) 45%, transparent);
+  text-align: left;
+}
+
+.mision-estrellas {
+  display: flex;
+  gap: var(--e-2);
+  font-size: clamp(2rem, 1.6rem + 2vw, 3rem);
+  color: var(--acento-mision);
+}
+.mision-estrella {
+  display: inline-block;
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--acento-mision) 55%, transparent));
+  animation: mision-estrella-aparecer .5s cubic-bezier(.34, 1.56, .64, 1) both;
+  animation-delay: calc(var(--i) * 120ms + 80ms);
+}
+@keyframes mision-estrella-aparecer {
+  from { opacity: 0; transform: scale(.4) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.mision-debriefing-estado {
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-label);
+  font-weight: 500;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .85);
+  margin: 0;
+}
+.mision-debriefing-acciones {
+  display: flex;
+  gap: var(--e-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.mision-boton-primario,
+.mision-boton-secundario {
+  position: relative;
+  overflow: hidden;
+  min-height: 44px;
+  padding: var(--e-3) var(--e-6);
+  border-radius: var(--e-2);
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-label);
+  font-weight: 500;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform .25s cubic-bezier(.22, 1, .36, 1), box-shadow .25s ease, border-color .25s ease, background .25s ease, color .25s ease;
+}
+.mision-boton-primario {
+  border: 1px solid color-mix(in srgb, var(--acento-mision) 55%, transparent);
+  background: color-mix(in srgb, var(--acento-mision) 16%, transparent);
+  color: #fff;
+}
+.mision-boton-primario::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--acento-mision) 20%, transparent);
+  transform: translateX(-100%);
+  transition: transform .45s cubic-bezier(.22, 1, .36, 1);
+}
+.mision-boton-primario:hover {
+  border-color: color-mix(in srgb, var(--acento-mision) 85%, transparent);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--acento-mision) 32%, transparent);
+  transform: translateY(-2px);
+}
+.mision-boton-primario:hover::after { transform: translateX(0); }
+.mision-boton-primario > * { position: relative; z-index: 1; }
+
+.mision-boton-secundario {
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(255, 255, 255, .03);
+  color: rgba(255, 255, 255, .6);
+}
+.mision-boton-secundario:hover {
+  border-color: rgba(255, 255, 255, .3);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+/* ── Accesibilidad ────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .mision-fondo,
+  .mision-modal,
+  .mision-fase,
+  .mision-estrella {
+    animation: none !important;
+  }
+  .mision-boton-primario,
+  .mision-boton-secundario,
+  .mision-boton-icono,
+  .mision-cerrar {
+    transition: none !important;
+  }
+}
+
+/* ── Mobile first — la cabecera se apila en pantallas angostas ────────── */
+@media (max-width: 560px) {
+  .mision-cabecera {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .mision-controles-header {
+    justify-content: space-between;
+  }
+  .mision-briefing-dato,
+  .mision-debriefing-dato {
+    text-align: left;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   AYUDA PASO A PASO — nucleo/ayuda-paso-a-paso.js
+   Vive dentro del contenedor de cada juego (position:relative), así el
+   botón queda en la esquina del área de juego y no en la del modal entero.
+═══════════════════════════════════════════════════════════════════════ */
+.ayuda-raiz {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.ayuda-boton {
+  position: absolute;
+  right: var(--e-3);
+  bottom: var(--e-3);
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  min-height: 44px;
+  padding: var(--e-2) var(--e-4);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  background: rgba(12, 10, 18, .7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: rgba(255, 255, 255, .7);
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-label);
+  letter-spacing: .02em;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
+  transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), border-color .2s ease, color .2s ease, box-shadow .2s ease;
+}
+.ayuda-boton span { color: var(--acento-mision); font-weight: 700; }
+.ayuda-boton:hover,
+.ayuda-boton:focus-visible {
+  border-color: var(--acento-mision);
+  color: #fff;
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--acento-mision) 30%, transparent);
+}
+.ayuda-boton:focus-visible { outline: 2px solid var(--acento-mision); outline-offset: 2px; }
+.ayuda-boton--destacado { transform: scale(1.14); }
+
+.ayuda-oferta {
+  position: absolute;
+  right: var(--e-3);
+  bottom: calc(44px + var(--e-3) + var(--e-2));
+  pointer-events: auto;
+  padding: var(--e-2) var(--e-3);
+  border-radius: var(--e-2);
+  background: var(--acento-mision);
+  color: #14101c;
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-label);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--acento-mision) 45%, transparent);
+  animation: ayuda-oferta-aparecer .3s ease both;
+}
+@keyframes ayuda-oferta-aparecer {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ayuda-panel-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--e-4);
+  background: rgba(4, 3, 8, .78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: auto;
+  animation: mision-aparecer .2s ease both;
+}
+/* Mismo caso que .mision-fase[hidden] en la sección del modal: un author-rule
+   con la misma especificidad que [hidden] le gana a la regla nativa del
+   navegador — sin esto, el panel de ayuda se ve aunque hidden esté puesto. */
+.ayuda-panel-fondo[hidden] {
+  display: none;
+}
+
+.ayuda-panel {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e-4);
+  padding: var(--e-8) var(--e-6) var(--e-6);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, .05), transparent 40%),
+    linear-gradient(175deg, rgba(24, 19, 34, .94), rgba(11, 9, 16, .98));
+  border: 1px solid color-mix(in srgb, var(--acento-mision) 28%, rgba(255, 255, 255, .08));
+  border-radius: var(--e-6);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, .6),
+    0 0 60px color-mix(in srgb, var(--acento-mision) 14%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, .06);
+  outline: none;
+  text-align: center;
+  animation: mision-modal-aparecer .35s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.ayuda-dibujo {
+  width: min(220px, 70%);
+  padding: var(--e-4);
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--acento-mision) 12%, transparent), transparent 70%);
+  color: var(--acento-mision);
+  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--acento-mision) 30%, transparent));
+}
+.ayuda-dibujo svg { display: block; width: 100%; height: auto; }
+
+.ayuda-texto {
+  font-family: var(--mision-font-serif);
+  font-size: clamp(1.05rem, .95rem + .5vw, 1.3rem);
+  font-weight: 500;
+  color: #fff;
+  max-width: 30ch;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.ayuda-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  width: 100%;
+}
+.ayuda-contador {
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-label);
+  color: rgba(255, 255, 255, .4);
+  white-space: nowrap;
+}
+.ayuda-anterior,
+.ayuda-siguiente {
+  min-height: 44px;
+  padding: var(--e-2) var(--e-4);
+  border-radius: var(--e-2);
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-label);
+  font-weight: 500;
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+.ayuda-anterior {
+  border: 1px solid rgba(255, 255, 255, .14);
+  background: transparent;
+  color: rgba(255, 255, 255, .6);
+}
+.ayuda-anterior:hover:not(:disabled) { border-color: rgba(255, 255, 255, .3); color: #fff; }
+.ayuda-anterior:disabled { opacity: .3; cursor: default; }
+.ayuda-siguiente {
+  border: 1px solid var(--acento-mision);
+  background: color-mix(in srgb, var(--acento-mision) 18%, transparent);
+  color: #fff;
+  flex: 1;
+  max-width: 60%;
+}
+.ayuda-siguiente:hover {
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--acento-mision) 30%, transparent);
+  transform: translateY(-1px);
+}
+.ayuda-anterior:focus-visible,
+.ayuda-siguiente:focus-visible,
+.ayuda-ejemplo:focus-visible {
+  outline: 2px solid var(--acento-mision);
+  outline-offset: 2px;
+}
+
+.ayuda-ejemplo {
+  min-height: 44px;
+  padding: var(--e-2) var(--e-4);
+  border: none;
+  background: transparent;
+  color: var(--acento-mision);
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-label);
+  letter-spacing: .02em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* ── Animaciones de los dibujos del catálogo ─────────────────────────── */
+@keyframes ayuda-arrastrar-mover {
+  0%, 12% { transform: translateX(0); }
+  50% { transform: translateX(90px); }
+  85%, 100% { transform: translateX(90px); }
+}
+.ayuda-dibujo-mano { animation: ayuda-arrastrar-mover 2.4s cubic-bezier(.45, 0, .55, 1) infinite; }
+
+@keyframes ayuda-tocar-onda1 { 0% { r: 9; opacity: .8; } 100% { r: 28; opacity: 0; } }
+@keyframes ayuda-tocar-onda2 { 0% { r: 9; opacity: .5; } 100% { r: 34; opacity: 0; } }
+.ayuda-dibujo-onda1 { animation: ayuda-tocar-onda1 1.6s ease-out infinite; }
+.ayuda-dibujo-onda2 { animation: ayuda-tocar-onda2 1.6s ease-out infinite .4s; }
+
+@keyframes ayuda-esperar-girar { to { transform: rotate(360deg); } }
+.ayuda-dibujo-manecilla { animation: ayuda-esperar-girar 4s linear infinite; }
+
+@keyframes ayuda-meta-pulso { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+.ayuda-dibujo-estrella { animation: ayuda-meta-pulso 1.7s ease-in-out infinite; }
+
+/* La información nunca depende de la animación: cada dibujo ya se entiende
+   en su cuadro estático (mano sobre el camino, ondas de tamaños distintos,
+   reloj con manecilla quieta, estrella con destellos) — acá solo apagamos
+   el movimiento. */
+@media (prefers-reduced-motion: reduce) {
+  .ayuda-dibujo-mano,
+  .ayuda-dibujo-onda1,
+  .ayuda-dibujo-onda2,
+  .ayuda-dibujo-manecilla,
+  .ayuda-dibujo-estrella,
+  .ayuda-boton,
+  .ayuda-oferta,
+  .ayuda-panel {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -7,6 +7,8 @@
 // del grafo de módulos de la app; por eso las rutas viven en variables
 // (un string literal SÍ dispara el intento de resolución estática de TS).
 
+import { withBasePath } from './basePath'
+
 type OpcionesMision = {
   dificultad?: 1 | 2 | 3
   modoAccesible?: boolean
@@ -16,12 +18,12 @@ type OpcionesMision = {
 
 // Juegos ya migrados al motor nuevo — se amplía a medida que se suman fases.
 const JUEGOS_LISTOS: Record<string, string> = {
-  europa: '/misiones/juegos/mision-europa-senales.js',
-  webb: '/misiones/juegos/mision-webb-espejos.js',
-  dragonfly: '/misiones/juegos/mision-dragonfly-vuelo.js',
-  parker: '/misiones/juegos/mision-parker-escudo.js',
-  lisa: '/misiones/juegos/mision-lisa-vuelolibre.js',
-  voyager: '/misiones/juegos/mision-voyager-transmision.js',
+  europa: withBasePath('/misiones/juegos/mision-europa-senales.js'),
+  webb: withBasePath('/misiones/juegos/mision-webb-espejos.js'),
+  dragonfly: withBasePath('/misiones/juegos/mision-dragonfly-vuelo.js'),
+  parker: withBasePath('/misiones/juegos/mision-parker-escudo.js'),
+  lisa: withBasePath('/misiones/juegos/mision-lisa-vuelolibre.js'),
+  voyager: withBasePath('/misiones/juegos/mision-voyager-transmision.js'),
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,14 +36,14 @@ function asegurarEstilos() {
   if (document.querySelector('link[data-misiones-estilos]')) return
   const link = document.createElement('link')
   link.rel = 'stylesheet'
-  link.href = '/misiones/estilos-misiones.css'
+  link.href = withBasePath('/misiones/estilos-misiones.css')
   link.dataset.misionesEstilos = 'true'
   document.head.appendChild(link)
 }
 
 async function cargarMotor() {
   asegurarEstilos()
-  const rutaMotor = '/misiones/motor-misiones.js'
+  const rutaMotor = withBasePath('/misiones/motor-misiones.js')
   if (!promesaMotor) promesaMotor = import(/* webpackIgnore: true */ rutaMotor)
   const motor = await promesaMotor
   for (const [id, ruta] of Object.entries(JUEGOS_LISTOS)) {

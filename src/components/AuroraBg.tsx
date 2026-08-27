@@ -203,7 +203,7 @@ export default function AuroraBg() {
     gl.uniform3f(uAccent,   0.94, 0.75, 0.36)  // --aurora-accent: gold
 
     // ── Resize handler ────────────────────────────────────────────────────
-    const DPR_CAP = 1.5
+    const DPR_CAP = 1.25
     const resize = () => {
       const dpr   = Math.min(window.devicePixelRatio || 1, DPR_CAP)
       const scale = window.innerWidth < 768 ? 0.75 : 1.0  // halve resolution on mobile
