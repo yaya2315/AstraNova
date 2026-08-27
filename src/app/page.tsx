@@ -8,6 +8,7 @@ import { DeepNavProvider, useDeepNav, LAYERS } from '@/components/DeepNavEngine'
 import PremiumSpaceExperience from '@/components/PremiumSpaceExperience'
 import CockpitFrame from '@/components/CockpitFrame'
 import SideNav from '@/components/SideNav'
+import MusicToggle from '@/components/MusicToggle'
 import MiniSolarSystem from '@/components/MiniSolarSystem'
 import { NAV_ITEMS } from '@/lib/navItems'
 import {
@@ -355,6 +356,7 @@ export default function Home() {
       <SideNav />
       <DeepNavHUD />
       <DivePortal />
+      <MusicToggle />
 
       {/* PIEZA 3: Stack de capas — todas en el mismo punto del espacio */}
       <LayerStack />
