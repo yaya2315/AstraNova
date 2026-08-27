@@ -756,7 +756,7 @@ export function ConstellationsSection() {
 
   return (
     <section id="constelaciones" className="relative z-[1] pt-40 pb-24">
-      <div className="max-w-[1400px] mx-auto px-6 sm:px-8 md:px-12">
+      <div className="max-w-[1400px] mx-auto px-6 sm:px-8 md:px-12 lg:pl-[136px]">
         <FadeUp className="text-center mb-4"><ZoneLabel text="MAPA ESTELAR" /></FadeUp>
         <FadeUp className="text-center" delay={0.1}>
           <h2 className="font-serif text-[clamp(2.6rem,5.5vw,4.5rem)] text-white/75 font-normal italic mb-3">Constelaciones</h2>
@@ -777,7 +777,7 @@ export function ConstellationsSection() {
         </FadeUp>
       </div>
 
-      <FadeUp delay={0.25} className="px-6 sm:px-8 md:px-12 max-w-[1400px] mx-auto">
+      <FadeUp delay={0.25} className="px-6 sm:px-8 md:px-12 lg:pl-[136px] max-w-[1400px] mx-auto">
         <div
           ref={containerRef}
           className="relative overflow-hidden select-none rounded-2xl w-full"
@@ -828,7 +828,7 @@ export function ConstellationsSection() {
               >
                 {/* Close */}
                 <button onClick={()=>setSelected(null)}
-                  className="absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center text-white/30 hover:text-white/75 transition-colors z-10"
+                  className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center text-white/30 hover:text-white/75 active:text-white transition-colors z-10"
                   style={{border:'1px solid rgba(255,255,255,0.09)'}}>
                   <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <line x1="1" y1="1" x2="8" y2="8"/><line x1="8" y1="1" x2="1" y2="8"/>
@@ -1154,7 +1154,7 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
   ]
 
   return (
-    <FadeUp delay={0.3} className="max-w-[1400px] mx-auto px-6 sm:px-8 md:px-12 mt-14 pb-6">
+    <FadeUp delay={0.3} className="max-w-[1400px] mx-auto px-6 sm:px-8 md:px-12 lg:pl-[136px] mt-14 pb-6">
       <div className="card-glass-static overflow-hidden">
 
         {/* Header */}

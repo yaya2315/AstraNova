@@ -427,10 +427,10 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
       {/* Control de empuje — botones, no comparte gesto con el arrastre de dirección */}
       <div className="absolute top-4 right-4 z-20 flex items-center gap-1 glass-strong rounded-full px-2 py-1.5">
         <button onClick={() => adjustThrust(-THRUST_STEP)}
-          className="w-7 h-7 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 transition-colors font-display text-sm">−</button>
+          className="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/15 transition-colors font-display text-sm">−</button>
         <span className="font-display text-[0.6rem] tracking-[1px] text-accent-cyan w-10 text-center">{thrustDisplay.toFixed(2)}x</span>
         <button onClick={() => adjustThrust(THRUST_STEP)}
-          className="w-7 h-7 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 transition-colors font-display text-sm">+</button>
+          className="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/15 transition-colors font-display text-sm">+</button>
       </div>
 
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 font-display text-[0.55rem] tracking-[3px] text-slate-400 flex items-center gap-2.5 pointer-events-none whitespace-nowrap">
