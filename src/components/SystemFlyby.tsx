@@ -8,6 +8,10 @@ import * as THREE from 'three'
 import { planets, type PlanetData } from '@/lib/data'
 import { Sun, Planet, OrbitPaths, AsteroidBelt, Comets, SUN_RADIUS } from './SolarSystem'
 
+// Mismo criterio que en SolarSystem.tsx: este componente solo se monta en
+// el cliente, así que chequear window acá arriba es seguro.
+const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth < 768
+
 const MAX_TURN_RATE = 1.6     // rad/s al arrastrar hasta el borde
 const MAX_DRAG_PX = 140       // arrastre (px) para llegar al giro máximo
 const BASE_SPEED = 9          // unidades/seg a 1x de empuje
@@ -330,8 +334,8 @@ function SystemScene({ bodyRefs }: { bodyRefs: React.RefObject<Map<string, BodyE
     <>
       <ambientLight intensity={0.5} color="#334466" />
       <directionalLight position={[-15, 5, -20]} intensity={0.6} color="#6680cc" />
-      <Stars radius={220} depth={100} count={4000} factor={3} saturation={0} fade />
-      <Galaxies />
+      <Stars radius={220} depth={100} count={IS_MOBILE ? 1500 : 4000} factor={3} saturation={0} fade />
+      {!IS_MOBILE && <Galaxies />}
       <Sun />
       {planets.map((p: PlanetData) => (
         <Planet key={p.name} data={p} speedMul={1} onHover={NOOP} onLeave={NOOP} onClick={NOOP} registerRef={registerRef} />
@@ -384,8 +388,8 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
       style={{ touchAction: 'none' }}
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onPointerLeave={onUp}
     >
-      <Canvas camera={{ fov: CAMERA_FOV }} dpr={[1, 1.5]}
-        gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1, powerPreference: 'high-performance' }}>
+      <Canvas camera={{ fov: CAMERA_FOV }} dpr={IS_MOBILE ? [0.6, 1] : [1, 1.5]}
+        gl={{ antialias: !IS_MOBILE, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1, powerPreference: 'high-performance' }}>
         <SystemScene bodyRefs={bodyRefs} />
         <FlightRig steerRef={steerRef} thrustRef={thrustRef} bodyRefs={bodyRefs}
           onBoundsChange={setOutOfBounds} onNearestChange={setNearest} />

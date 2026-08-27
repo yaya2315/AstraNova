@@ -267,7 +267,7 @@ export function HeroSection() {
         style={{ y: contentY, opacity: contentOp }}
         className="w-full flex flex-col gap-10 relative z-[1]"
       >
-        <div className="max-w-[1440px] mx-auto w-full px-6 sm:px-8 md:px-12 lg:pl-[100px]">
+        <div className="max-w-[1440px] mx-auto w-full px-6 sm:px-8 md:px-12 lg:pl-[136px]">
           <motion.div
             initial={{ opacity: 0 }}
             animate={heroReady ? { opacity: 1 } : {}}
@@ -1363,13 +1363,13 @@ function GalleryLightbox({ indice, onClose, onNavegar }: { indice: number; onClo
         key={indice}
         initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
         transition={{ duration: 0.25, ease: EASE }}
-        className="card-glass-static w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col"
+        className="card-glass-static w-full max-w-3xl max-h-[88vh] overflow-y-auto overflow-x-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative w-full bg-black/40" style={{ aspectRatio: '3/2' }}>
+        <div className="relative w-full flex-shrink-0 bg-black/40" style={{ aspectRatio: '3/2' }}>
           <img src={img.srcDetalle} alt={img.alt} className="w-full h-full object-cover" />
         </div>
-        <div className="p-5 sm:p-6">
+        <div className="p-5 sm:p-6 flex-shrink-0">
           <div className="flex items-center gap-3 mb-2">
             <span className="font-display text-[0.5rem] tracking-[3px] text-accent-cyan">{String(indice + 1).padStart(2, '0')} / {String(galleryImages.length).padStart(2, '0')}</span>
           </div>

@@ -9,9 +9,16 @@ import { withBasePath } from '@/lib/basePath'
 import SystemFlybyView from './SystemFlyby'
 import { useDeepNav } from './DeepNavEngine'
 
-const ORBIT_SEGMENTS = 64
-const PLANET_SEGMENTS = 48
-const DETAIL_SEGMENTS = 48
+// Este módulo solo se carga en el cliente (dynamic(..., { ssr: false }) en
+// page.tsx), así que leer window acá arriba es seguro — no hay versión de
+// servidor con la que pueda desalinearse en la hidratación. Un celular de
+// gama media (4-6GB RAM) sufre sobre todo por: segmentos de esfera por
+// planeta, cantidad de estrellas/asteroides, y antialiasing — bajarlos un
+// escalón ahí no se nota a simple vista, pero libera bastante GPU/CPU.
+const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth < 768
+const ORBIT_SEGMENTS = IS_MOBILE ? 40 : 64
+const PLANET_SEGMENTS = IS_MOBILE ? 28 : 48
+const DETAIL_SEGMENTS = IS_MOBILE ? 28 : 48
 export const SUN_RADIUS = 2.5
 
 /* ====== SHARED GEOMETRIES ====== */
@@ -421,10 +428,11 @@ export const OrbitPaths = memo(function OrbitPaths() {
 })
 
 /* ====== ASTEROID BELT ====== */
+const ASTEROID_COUNT = IS_MOBILE ? 150 : 400
 export const AsteroidBelt = memo(function AsteroidBelt() {
   const positions = useMemo(() => {
-    const p = new Float32Array(400 * 3)
-    for (let i = 0; i < 400; i++) {
+    const p = new Float32Array(ASTEROID_COUNT * 3)
+    for (let i = 0; i < ASTEROID_COUNT; i++) {
       const a = Math.random() * Math.PI * 2, r = 19.5 + Math.random() * 2
       p[i * 3] = Math.cos(a) * r; p[i * 3 + 1] = (Math.random() - 0.5) * 0.5; p[i * 3 + 2] = Math.sin(a) * r
     }
@@ -576,7 +584,7 @@ function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick, flyTarge
     <>
       <ambientLight intensity={0.5} color="#334466" />
       <directionalLight position={[-15, 5, -20]} intensity={0.6} color="#6680cc" />
-      <Stars radius={180} depth={80} count={1800} factor={3} saturation={0} />
+      <Stars radius={180} depth={80} count={IS_MOBILE ? 900 : 1800} factor={3} saturation={0} />
       <Sun />
       {planets.map((p) => (
         <Planet key={p.name} data={p} speedMul={speedMul} onHover={onPlanetHover} onLeave={onPlanetLeave}
@@ -584,7 +592,9 @@ function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick, flyTarge
       ))}
       <OrbitPaths />
       <AsteroidBelt />
-      <Comets />
+      {/* Cometas: 3 objetos × 10 sprites con su propia física por cuadro —
+          puramente decorativo, se salta en celulares de gama media/baja. */}
+      {!IS_MOBILE && <Comets />}
       <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.06} enableZoom={false}
         enablePan={false} maxPolarAngle={Math.PI * 0.48} minPolarAngle={Math.PI * 0.1} />
       <CameraFlyTo controlsRef={controlsRef} planetRefs={planetRefs} flyTarget={flyTarget} />
@@ -776,8 +786,8 @@ export default function SolarSystem() {
           vive en el padre y sigue intacto, así que la cámara vuelve a enfocar el
           mismo planeta apenas se remonta — no se pierde el lugar donde estabas. */}
       {!flying && (
-        <Canvas camera={{ position: [0, 30, 55], fov: 50 }} dpr={[0.75, 1.25]} frameloop={depth === 1 ? 'always' : 'never'}
-          gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2, powerPreference: 'high-performance' }}
+        <Canvas camera={{ position: [0, 30, 55], fov: 50 }} dpr={IS_MOBILE ? [0.6, 1] : [0.75, 1.25]} frameloop={depth === 1 ? 'always' : 'never'}
+          gl={{ antialias: !IS_MOBILE, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2, powerPreference: 'high-performance' }}
           onPointerMove={handlePointerMove}>
           <Suspense fallback={null}>
             <Scene speedMul={speed} onPlanetHover={handleHover} onPlanetLeave={handleLeave}
