@@ -26,6 +26,9 @@
   <button id="abrir-parker-n1">Abrir Parker (N1)</button>
   <button id="abrir-parker-n2">Abrir Parker (N2)</button>
   <button id="abrir-parker-n3">Abrir Parker (N3)</button>
+  <button id="abrir-lisa-n1">Abrir LISA (N1)</button>
+  <button id="abrir-lisa-n2">Abrir LISA (N2)</button>
+  <button id="abrir-lisa-n3">Abrir LISA (N3)</button>
   <div id="estado"></div>
 
   <script type="module">
@@ -37,6 +40,7 @@
     registrarMision('webb', () => import('/misiones/juegos/mision-webb-espejos.js'))
     registrarMision('dragonfly', () => import('/misiones/juegos/mision-dragonfly-vuelo.js'))
     registrarMision('parker', () => import('/misiones/juegos/mision-parker-escudo.js'))
+    registrarMision('lisa', () => import('/misiones/juegos/mision-lisa-vuelolibre.js'))
 
     document.getElementById('abrir').addEventListener('click', () => {
       abrirMision('prueba')
@@ -76,6 +80,15 @@
     })
     document.getElementById('abrir-parker-n3').addEventListener('click', () => {
       abrirMision('parker', { dificultad: 3, modoAccesible: false, semilla: 5 })
+    })
+    document.getElementById('abrir-lisa-n1').addEventListener('click', () => {
+      abrirMision('lisa', { dificultad: 1, modoAccesible: false, semilla: 9 })
+    })
+    document.getElementById('abrir-lisa-n2').addEventListener('click', () => {
+      abrirMision('lisa', { dificultad: 2, modoAccesible: false, semilla: 9 })
+    })
+    document.getElementById('abrir-lisa-n3').addEventListener('click', () => {
+      abrirMision('lisa', { dificultad: 3, modoAccesible: false, semilla: 9 })
     })
 
     const estado = document.getElementById('estado')

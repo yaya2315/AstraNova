@@ -1278,7 +1278,7 @@ const GAME_META: { type: MissionGameType; label: string }[] = [
   { type: 'zone',     label: 'Girar el Escudo'       },
   { type: 'order',    label: 'Orden de Vuelo'        },
   { type: 'mirrors',  label: 'Alinear Espejos'       },
-  { type: 'wave',     label: 'Detectar la Onda'      },
+  { type: 'wave',     label: 'Vuelo Libre'           },
   { type: 'code',     label: 'Código de Transmisión' },
 ]
 
@@ -1295,6 +1295,7 @@ const MOTOR_MISION_IDS: Record<number, string> = {
   1: 'parker',    // Parker Solar Probe
   2: 'dragonfly', // Dragonfly
   3: 'webb',      // James Webb
+  4: 'lisa',      // LISA Pathfinder
 }
 
 /* ─── Game 1: Secuencia de Señales (Europa Clipper) ───────────────────────── */
