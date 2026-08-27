@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useRef, useState, useMemo, useCallback, useEffect, memo } from 'react'
+import { createPortal } from 'react-dom'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Stars, Html } from '@react-three/drei'
 import * as THREE from 'three'
@@ -796,16 +797,32 @@ export default function SolarSystem() {
         </Canvas>
       )}
 
-      {hovered && !selected && (
+      {/* Portal a document.body — mismo motivo que SystemFlybyView y los demás
+          overlays del sitio: esta tarjeta vive dentro de un `.deep-layer` al
+          que DeepNavEngine le aplica `transform` (translateZ para el efecto
+          de profundidad). Por spec de CSS, un ancestro con `transform`
+          distinto de `none` pasa a ser el "contedor" de cualquier hijo
+          `position: fixed` — así que sin el portal, el `left/top` calculado
+          a partir del mouse quedaba resuelto contra ESE ancestro transformado
+          en vez del viewport real, y la tarjeta terminaba pegada arriba de
+          la pantalla en vez de al lado del cursor. */}
+      {hovered && !selected && typeof document !== 'undefined' && createPortal(
         <div className="fixed z-50 pointer-events-none transition-opacity duration-200"
-          style={{ left: Math.min(mouseRef.current.x + 20, typeof window !== 'undefined' ? window.innerWidth - 340 : 9999), top: Math.max(10, mouseRef.current.y - 20) }}>
+          style={{
+            left: Math.min(mouseRef.current.x + 20, typeof window !== 'undefined' ? window.innerWidth - 340 : 9999),
+            top: Math.min(
+              Math.max(10, mouseRef.current.y - 20),
+              typeof window !== 'undefined' ? window.innerHeight - 220 : 9999,
+            ),
+          }}>
           <div className="glass-strong rounded-2xl p-5 max-w-[280px] shadow-2xl border border-accent-purple/10">
             <h4 className="font-display text-sm tracking-[2px] mb-1" style={{ color: hovered.color }}>{hovered.name}</h4>
             <div className="font-display text-[0.55rem] tracking-[3px] text-slate-500 mb-2">{hovered.type}</div>
             <p className="text-sm text-slate-400 leading-relaxed mb-3">{hovered.desc}</p>
             <div className="text-[0.55rem] text-accent-purple font-display tracking-widest">CLICK PARA EXPLORAR</div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {selected && !flying && (
