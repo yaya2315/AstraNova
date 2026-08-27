@@ -21,6 +21,7 @@ const JUEGOS_LISTOS: Record<string, string> = {
   dragonfly: '/misiones/juegos/mision-dragonfly-vuelo.js',
   parker: '/misiones/juegos/mision-parker-escudo.js',
   lisa: '/misiones/juegos/mision-lisa-vuelolibre.js',
+  voyager: '/misiones/juegos/mision-voyager-transmision.js',
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

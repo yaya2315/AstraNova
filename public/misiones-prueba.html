@@ -29,6 +29,9 @@
   <button id="abrir-lisa-n1">Abrir LISA (N1)</button>
   <button id="abrir-lisa-n2">Abrir LISA (N2)</button>
   <button id="abrir-lisa-n3">Abrir LISA (N3)</button>
+  <button id="abrir-voyager-n1">Abrir Voyager (N1)</button>
+  <button id="abrir-voyager-n2">Abrir Voyager (N2)</button>
+  <button id="abrir-voyager-n3">Abrir Voyager (N3)</button>
   <div id="estado"></div>
 
   <script type="module">
@@ -41,6 +44,7 @@
     registrarMision('dragonfly', () => import('/misiones/juegos/mision-dragonfly-vuelo.js'))
     registrarMision('parker', () => import('/misiones/juegos/mision-parker-escudo.js'))
     registrarMision('lisa', () => import('/misiones/juegos/mision-lisa-vuelolibre.js'))
+    registrarMision('voyager', () => import('/misiones/juegos/mision-voyager-transmision.js'))
 
     document.getElementById('abrir').addEventListener('click', () => {
       abrirMision('prueba')
@@ -89,6 +93,15 @@
     })
     document.getElementById('abrir-lisa-n3').addEventListener('click', () => {
       abrirMision('lisa', { dificultad: 3, modoAccesible: false, semilla: 9 })
+    })
+    document.getElementById('abrir-voyager-n1').addEventListener('click', () => {
+      abrirMision('voyager', { dificultad: 1, modoAccesible: false, semilla: 13 })
+    })
+    document.getElementById('abrir-voyager-n2').addEventListener('click', () => {
+      abrirMision('voyager', { dificultad: 2, modoAccesible: false, semilla: 13 })
+    })
+    document.getElementById('abrir-voyager-n3').addEventListener('click', () => {
+      abrirMision('voyager', { dificultad: 3, modoAccesible: false, semilla: 13 })
     })
 
     const estado = document.getElementById('estado')

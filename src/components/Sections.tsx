@@ -1296,6 +1296,7 @@ const MOTOR_MISION_IDS: Record<number, string> = {
   2: 'dragonfly', // Dragonfly
   3: 'webb',      // James Webb
   4: 'lisa',      // LISA Pathfinder
+  5: 'voyager',   // Voyager 1 & 2
 }
 
 /* ─── Game 1: Secuencia de Señales (Europa Clipper) ───────────────────────── */
