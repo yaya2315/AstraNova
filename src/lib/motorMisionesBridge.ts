@@ -19,6 +19,7 @@ const JUEGOS_LISTOS: Record<string, string> = {
   europa: '/misiones/juegos/mision-europa-senales.js',
   webb: '/misiones/juegos/mision-webb-espejos.js',
   dragonfly: '/misiones/juegos/mision-dragonfly-vuelo.js',
+  parker: '/misiones/juegos/mision-parker-escudo.js',
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

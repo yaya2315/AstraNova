@@ -23,6 +23,9 @@
   <button id="abrir-dragonfly-n1">Abrir Dragonfly (N1)</button>
   <button id="abrir-dragonfly-n2">Abrir Dragonfly (N2)</button>
   <button id="abrir-dragonfly-n3">Abrir Dragonfly (N3)</button>
+  <button id="abrir-parker-n1">Abrir Parker (N1)</button>
+  <button id="abrir-parker-n2">Abrir Parker (N2)</button>
+  <button id="abrir-parker-n3">Abrir Parker (N3)</button>
   <div id="estado"></div>
 
   <script type="module">
@@ -33,6 +36,7 @@
     registrarMision('europa', () => import('/misiones/juegos/mision-europa-senales.js'))
     registrarMision('webb', () => import('/misiones/juegos/mision-webb-espejos.js'))
     registrarMision('dragonfly', () => import('/misiones/juegos/mision-dragonfly-vuelo.js'))
+    registrarMision('parker', () => import('/misiones/juegos/mision-parker-escudo.js'))
 
     document.getElementById('abrir').addEventListener('click', () => {
       abrirMision('prueba')
@@ -63,6 +67,15 @@
     })
     document.getElementById('abrir-dragonfly-n3').addEventListener('click', () => {
       abrirMision('dragonfly', { dificultad: 3, modoAccesible: false, semilla: 11 })
+    })
+    document.getElementById('abrir-parker-n1').addEventListener('click', () => {
+      abrirMision('parker', { dificultad: 1, modoAccesible: false, semilla: 5 })
+    })
+    document.getElementById('abrir-parker-n2').addEventListener('click', () => {
+      abrirMision('parker', { dificultad: 2, modoAccesible: false, semilla: 5 })
+    })
+    document.getElementById('abrir-parker-n3').addEventListener('click', () => {
+      abrirMision('parker', { dificultad: 3, modoAccesible: false, semilla: 5 })
     })
 
     const estado = document.getElementById('estado')

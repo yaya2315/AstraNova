@@ -1275,7 +1275,7 @@ const CHAIN_MSGS = [
 
 const GAME_META: { type: MissionGameType; label: string }[] = [
   { type: 'sequence', label: 'Sondeo de Hielo'       },
-  { type: 'zone',     label: 'Zona de Captura'      },
+  { type: 'zone',     label: 'Girar el Escudo'       },
   { type: 'order',    label: 'Orden de Vuelo'        },
   { type: 'mirrors',  label: 'Alinear Espejos'       },
   { type: 'wave',     label: 'Detectar la Onda'      },
@@ -1292,6 +1292,7 @@ const MISSION_DOT_COLORS: Record<string, string> = {
 // sigue con el placeholder inline de abajo hasta que estén listos.
 const MOTOR_MISION_IDS: Record<number, string> = {
   0: 'europa',    // Europa Clipper
+  1: 'parker',    // Parker Solar Probe
   2: 'dragonfly', // Dragonfly
   3: 'webb',      // James Webb
 }
