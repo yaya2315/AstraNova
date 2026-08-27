@@ -8,6 +8,7 @@ import { crearEntrada } from '../nucleo/entrada-unificada.js'
 import { tono, ruido } from '../nucleo/audio-mision.js'
 import { evaluarEstrellas } from '../nucleo/evaluador-estrellas.js'
 import { crearAyuda, registrarDibujo } from '../nucleo/ayuda-paso-a-paso.js'
+import { generarEtapas } from '../nucleo/progresion-dificultad.js'
 
 // Dibujos específicos de este juego para el panel de ayuda.
 registrarDibujo('ees-comparar', () => `
@@ -69,13 +70,17 @@ function generarRonda(azar, config) {
   return { alturas, posicionFina, resuelto: false }
 }
 
+// 5 etapas por nivel: 1 tutorial fijo (siempre igual, enseña la regla) + 4
+// etapas reales que crecen en línea recta desde una base fácil hasta el
+// objetivo de N1/N2/N3 — así el nivel elegido SÍ se nota, cada vez más a
+// medida que se avanza, en vez de saltar una sola vez al final.
+const BASE_FACIL = { columnas: 3, brecha: 0.55 }
+
 function generarSecuenciaRondas(dificultad) {
   const d = PARAMETROS_DIFICULTAD[dificultad]
   return [
-    { columnas: 3, brecha: 0.55 },
-    { columnas: 4, brecha: 0.4 },
-    { columnas: d.columnas, brecha: d.brecha },
-    { columnas: d.columnas, brecha: d.brecha },
+    BASE_FACIL,
+    ...generarEtapas(BASE_FACIL, d, 4, ['columnas']),
   ]
 }
 
@@ -197,7 +202,9 @@ export function crearMision(contenedor, opciones) {
       emitir('progreso', (indiceRonda + 1) / secuenciaRondas.length)
       setTimeout(finalizarRonda, 900)
     } else {
-      if (indiceRonda >= 2) fallosReales += 1
+      // La ronda 0 es el tutorial fijo — no cuenta para las estrellas. Las
+      // 4 rondas reales (1 a 4) sí, todas por igual.
+      if (indiceRonda >= 1) fallosReales += 1
       reproducirFallo(i)
       anunciar('Ahí no — probá con otra columna.')
     }
@@ -230,8 +237,8 @@ export function crearMision(contenedor, opciones) {
       metricas: { fallosReales },
       umbrales: [
         { estrellas: 1, descripcion: 'Encontrarlo', condicion: () => true },
-        { estrellas: 2, descripcion: 'Con pocos intentos de más', condicion: (m) => m.fallosReales <= 2 },
-        { estrellas: 3, descripcion: 'A la primera en las dos pasadas reales', condicion: (m) => m.fallosReales === 0 },
+        { estrellas: 2, descripcion: 'Con pocos intentos de más', condicion: (m) => m.fallosReales <= 4 },
+        { estrellas: 3, descripcion: 'A la primera en las cuatro etapas reales', condicion: (m) => m.fallosReales === 0 },
       ],
     })
     emitir('superada', { estrellas, fallosReales })

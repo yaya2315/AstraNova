@@ -5,6 +5,10 @@ web/
 *.log
 tsconfig.tsbuildinfo
 
+# Backup local de texturas originales (ver scripts/resize-textures.mjs) —
+# son varios MB, no hace falta subirlos al repo, solo quedan en tu compu.
+assets-originales/
+
 # Editor / entorno local — no forman parte del sitio
 .vscode/
 .claude/

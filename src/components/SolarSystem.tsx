@@ -243,8 +243,12 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
   // Hitbox de click más grande que el mesh visible — sin esto, planetas chicos
   // (Mercurio) son casi imposibles de acertar con el mouse/dedo.
   const hitboxGeo = useMemo(() => getSharedSphere(Math.max(data.size * 1.8, 0.55), 12), [data.size])
-  // Nubes: solo planetas con atmósfera densa — Mercurio y Marte se quedan sin ellas.
-  const hasClouds = data.name !== 'Mercurio' && data.name !== 'Marte'
+  // Nubes: solo planetas con atmósfera densa — Mercurio y Marte se quedan sin
+  // ellas, y en celular se saltan en todos: es una esfera transparente extra
+  // por planeta (alpha blending, caro en fill-rate en GPUs móviles) que se
+  // superpone al aro interior y al halo — de las tres capas decorativas es
+  // la que menos se nota si falta.
+  const hasClouds = !IS_MOBILE && data.name !== 'Mercurio' && data.name !== 'Marte'
   const cloudGeo = useMemo(() => hasClouds ? getSharedSphere(data.size * 1.025, PLANET_SEGMENTS) : null, [hasClouds, data.size])
   const cloudTex = useMemo(() => hasClouds ? getCloudTexture(data.name) : null, [hasClouds, data.name])
 
@@ -300,10 +304,14 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
       <mesh geometry={rimGeo} scale={hovered ? 1.22 : 1.1}>
         <meshBasicMaterial color={data.color} transparent opacity={hovered ? 0.35 : 0.15} side={THREE.BackSide} />
       </mesh>
-      {/* Outer glow — soft atmospheric halo */}
-      <mesh geometry={rimGeo} scale={hovered ? 1.45 : 1.25}>
-        <meshBasicMaterial color={data.color} transparent opacity={hovered ? 0.12 : 0.05} side={THREE.BackSide} />
-      </mesh>
+      {/* Outer glow — soft atmospheric halo. Es la capa transparente más
+          grande (hasta 1.45× el planeta, cubre más píxeles en pantalla que
+          cualquier otra), así que es la primera que se salta en celular. */}
+      {!IS_MOBILE && (
+        <mesh geometry={rimGeo} scale={hovered ? 1.45 : 1.25}>
+          <meshBasicMaterial color={data.color} transparent opacity={hovered ? 0.12 : 0.05} side={THREE.BackSide} />
+        </mesh>
+      )}
       {hovered && (
         <Html distanceFactor={15} center style={{ pointerEvents: 'none' }}>
           <div className="px-4 py-1.5 rounded-full glass-strong text-accent-cyan text-[0.6rem] font-display tracking-[3px] whitespace-nowrap shadow-lg shadow-accent-purple/10 border border-accent-purple/20">

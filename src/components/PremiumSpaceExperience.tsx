@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import AuroraBg from './AuroraBg'
+import { useDeepNav } from './DeepNavEngine'
 
 // ── Export ─────────────────────────────────────────────────────────────────────
 //
@@ -15,6 +16,10 @@ import AuroraBg from './AuroraBg'
 // especificidad. Al vivir en un hijo separado, ambos transforms conviven.
 export default function PremiumSpaceExperience() {
   const parallaxRef = useRef<HTMLDivElement>(null)
+  // Capa 1 = Sistema Solar (ver LAYERS en DeepNavEngine.tsx) — el otro
+  // contexto WebGL pesado del sitio. Le avisamos a la aurora para que se
+  // pause en celular mientras esa capa está al frente.
+  const { depth } = useDeepNav()
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -47,7 +52,7 @@ export default function PremiumSpaceExperience() {
         className="absolute -inset-4"
         style={{ willChange: 'transform', transition: 'transform 0.6s cubic-bezier(0.22,1,0.36,1)' }}
       >
-        <AuroraBg />
+        <AuroraBg pauseOnMobile={depth === 1} />
       </div>
 
       {/* Layer 1 — Radial vignette: deepens screen edges */}

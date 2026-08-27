@@ -9,6 +9,7 @@ import { crearEntrada } from '../nucleo/entrada-unificada.js'
 import { tono, ruido } from '../nucleo/audio-mision.js'
 import { evaluarEstrellas } from '../nucleo/evaluador-estrellas.js'
 import { crearAyuda, registrarDibujo } from '../nucleo/ayuda-paso-a-paso.js'
+import { generarEtapas } from '../nucleo/progresion-dificultad.js'
 
 registrarDibujo('lpf-alerta', () => `
   <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -72,13 +73,18 @@ function generarRonda(azar, config) {
   return { lados: n, secuencia, paso: 0, resuelto: false }
 }
 
+// 5 etapas por nivel: 1 tutorial fijo + 4 etapas reales que crecen en línea
+// recta desde una base fácil hasta el objetivo de N1/N2/N3. La base queda
+// deliberadamente por debajo del objetivo de N1 (3 lados en vez de 4) para
+// que incluso el nivel más fácil muestre una curva real dentro de sus 4
+// etapas, no solo un valor plano repetido (ver nucleo/progresion-dificultad.js).
+const BASE_FACIL = { lados: 3, pasos: 1 }
+
 function generarSecuenciaRondas(dificultad) {
   const d = PARAMETROS_DIFICULTAD[dificultad]
   return [
-    { lados: 3, pasos: 1 },
-    { lados: 4, pasos: 2 },
-    { lados: d.lados, pasos: d.pasos },
-    { lados: d.lados, pasos: d.pasos },
+    BASE_FACIL,
+    ...generarEtapas(BASE_FACIL, d, 4, ['lados', 'pasos']),
   ]
 }
 
@@ -227,7 +233,9 @@ export function crearMision(contenedor, opciones) {
         setTimeout(marcarPeligro, 500)
       }
     } else {
-      if (indiceRonda >= 2) fallosReales += 1
+      // La ronda 0 es el tutorial fijo — no cuenta para las estrellas. Las
+      // 4 rondas reales (1 a 4) sí, todas por igual.
+      if (indiceRonda >= 1) fallosReales += 1
       reproducirFallo()
       anunciar('Ahí no había peligro — mirá bien qué lado se acerca.')
     }
@@ -256,7 +264,7 @@ export function crearMision(contenedor, opciones) {
       metricas: { fallosReales },
       umbrales: [
         { estrellas: 1, descripcion: 'Mantenerlas libres', condicion: () => true },
-        { estrellas: 2, descripcion: 'Con pocos empujones de más', condicion: (m) => m.fallosReales <= 2 },
+        { estrellas: 2, descripcion: 'Con pocos empujones de más', condicion: (m) => m.fallosReales <= 4 },
         { estrellas: 3, descripcion: 'Sin tocarlas nunca', condicion: (m) => m.fallosReales === 0 },
       ],
     })

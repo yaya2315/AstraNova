@@ -7,6 +7,7 @@ import { crearEntrada } from '../nucleo/entrada-unificada.js'
 import { tono } from '../nucleo/audio-mision.js'
 import { evaluarEstrellas } from '../nucleo/evaluador-estrellas.js'
 import { crearAyuda, registrarDibujo } from '../nucleo/ayuda-paso-a-paso.js'
+import { generarEtapas } from '../nucleo/progresion-dificultad.js'
 
 registrarDibujo('mdv-lista', () => `
   <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -127,17 +128,17 @@ function calcularSolucion(nivel) {
 function nivelTutorial1() {
   return { muestras: [{ x: 2, y: 2 }], vientos: [], requiereVolverABase: false, mostrarManitaInicial: true }
 }
-function nivelTutorial2() {
-  return { muestras: [{ x: 3, y: 3 }], vientos: [], requiereVolverABase: false, mostrarManitaInicial: false }
-}
 
-// ── Nivel real, según la dificultad elegida ───────────────────────────────
+// ── Nivel real, según parámetros ya resueltos (ver generarNiveles) ────────
 // Las muestras se mantienen cerca de la base (distancia 2-4) para que la
 // vuelta completa —ir, recoger todas, volver— nunca necesite demasiados
 // bloques: "nunca más de 10 bloques necesarios" es la regla, no una
 // sugerencia, así que la generación la respeta por diseño.
-function generarNivelReal(azar, dificultad) {
-  const params = PARAMETROS_DIFICULTAD[dificultad]
+//
+// `params` ya viene calculado (no es un nivel de dificultad 1|2|3): puede
+// ser el objetivo final de N1/N2/N3, o un punto intermedio de la curva de
+// 5 etapas (ver generarNiveles).
+function generarNivelReal(azar, params) {
   const ocupadas = new Set([idCelda(BASE)])
   const muestras = []
   let intentos = 0
@@ -199,6 +200,20 @@ function generarNivelReal(azar, dificultad) {
   return nivel
 }
 
+// 5 etapas por nivel: 1 tutorial fijo + 4 niveles reales que crecen en línea
+// recta desde una base fácil (1 muestra, sin viento — el propio piso de
+// N1) hasta el objetivo de N1/N2/N3 elegido. En N1 las 4 etapas reales
+// quedan parejas (no hay a dónde bajar más), pero cada una es un mapa
+// nuevo — en N2/N3 sí crecen de verdad en cantidad de muestras y viento
+// (ver nucleo/progresion-dificultad.js).
+const BASE_FACIL = { muestras: 1, viento: 0 }
+
+function generarNiveles(azar, dificultad) {
+  const d = PARAMETROS_DIFICULTAD[dificultad]
+  const etapasReales = generarEtapas(BASE_FACIL, d, 4, ['muestras', 'viento'])
+  return [nivelTutorial1(), ...etapasReales.map((params) => generarNivelReal(azar, params))]
+}
+
 // ── Componente principal ─────────────────────────────────────────────────
 export function crearMision(contenedor, opciones) {
   const azar = crearAleatorio(opciones.semilla >>> 0 || Date.now())
@@ -212,7 +227,7 @@ export function crearMision(contenedor, opciones) {
   let entrada = null
   let quitarTeclado = null
 
-  const niveles = [nivelTutorial1(), nivelTutorial2(), generarNivelReal(azar, opciones.dificultad)]
+  const niveles = generarNiveles(azar, opciones.dificultad)
   let indiceNivel = 0
   let nivel = niveles[0]
   let tape = []
@@ -502,10 +517,10 @@ export function crearMision(contenedor, opciones) {
     if (tape.length === 0 || enVuelo || pausado) return
     reiniciarEjecucion()
     enVuelo = true
-    // Solo cuenta como "intento" en el nivel real: las dos rondas
-    // tutoriales son siempre resolubles al toque y no deberían restarle
-    // estrellas a alguien por haberlas jugado.
-    if (indiceNivel === niveles.length - 1) intentosVuelo += 1
+    // Solo cuenta como "intento" en los niveles reales (índice 1 a 4): el
+    // tutorial (índice 0) es siempre resoluble al toque y no debería
+    // restarle estrellas a alguien por haberlo jugado.
+    if (indiceNivel >= 1) intentosVuelo += 1
     actualizarBotonesAccion()
     avanzarUnPaso({ paraContinuar: true })
   }
@@ -532,13 +547,16 @@ export function crearMision(contenedor, opciones) {
       renderCinta()
       if (nivel.mostrarManitaInicial) mostrarManitaPaleta('avanzar')
     } else {
+      // `intentosVuelo` ahora suma los reintentos de los 4 niveles reales
+      // (antes solo contaba el único nivel real que había) — los umbrales
+      // se ajustan a esa escala más amplia.
       const margen = Math.max(3, Math.round(nivel.optimoInstrucciones * 0.3))
       const { estrellas } = evaluarEstrellas({
         metricas: { intentos: intentosVuelo, instrucciones: tape.length },
         umbrales: [
           { estrellas: 1, descripcion: 'Lograrlo', condicion: () => true },
-          { estrellas: 2, descripcion: 'En pocos intentos', condicion: (m) => m.intentos <= 4 },
-          { estrellas: 3, descripcion: 'Con pocas instrucciones', condicion: (m) => m.intentos <= 2 && m.instrucciones <= nivel.optimoInstrucciones + margen },
+          { estrellas: 2, descripcion: 'En pocos intentos', condicion: (m) => m.intentos <= 10 },
+          { estrellas: 3, descripcion: 'Con pocas instrucciones', condicion: (m) => m.intentos <= 6 && m.instrucciones <= nivel.optimoInstrucciones + margen },
         ],
       })
       emitir('superada', { estrellas, intentos: intentosVuelo, instrucciones: tape.length })

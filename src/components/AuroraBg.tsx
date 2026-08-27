@@ -137,8 +137,15 @@ function compileShader(gl: WebGLRenderingContext, type: number, src: string): We
 // ─────────────────────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
-export default function AuroraBg() {
+export default function AuroraBg({ pauseOnMobile = false }: { pauseOnMobile?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // `pauseOnMobile` lo controla PremiumSpaceExperience según la capa activa
+  // (true cuando el Sistema Solar 3D está al frente). Va en un ref, no en el
+  // array de dependencias del efecto de abajo, para no tener que destruir y
+  // recrear todo el contexto WebGL cada vez que el usuario navega de capa —
+  // el loop de animación ya corre, solo lee el valor más nuevo cada cuadro.
+  const pauseRef = useRef(pauseOnMobile)
+  useEffect(() => { pauseRef.current = pauseOnMobile }, [pauseOnMobile])
 
   useEffect(() => {
     const canvas = canvasRef.current!
@@ -224,7 +231,11 @@ export default function AuroraBg() {
     const t0    = performance.now()
 
     const frame = (now: number) => {
-      if (active && visible) {
+      // En celular, mientras el Sistema Solar 3D (otro contexto WebGL aparte
+      // de este) está al frente, esta aurora de fondo queda casi tapada de
+      // todos modos — pausarla ahí libera GPU para lo que sí se ve.
+      const pausedForHeavyLayer = pauseRef.current && window.innerWidth < 768
+      if (active && visible && !pausedForHeavyLayer) {
         gl.uniform1f(uTime, (now - t0) * 0.001)
         gl.drawArrays(gl.TRIANGLES, 0, 3)
       }

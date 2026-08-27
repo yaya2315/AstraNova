@@ -9,6 +9,7 @@ import { crearEntrada } from '../nucleo/entrada-unificada.js'
 import { tono, barrido } from '../nucleo/audio-mision.js'
 import { evaluarEstrellas } from '../nucleo/evaluador-estrellas.js'
 import { crearAyuda, registrarDibujo } from '../nucleo/ayuda-paso-a-paso.js'
+import { generarEtapas } from '../nucleo/progresion-dificultad.js'
 
 // Dibujos específicos de este juego para el panel de ayuda — se suman al
 // catálogo compartido (arrastrar/tocar/esperar/meta viven en el núcleo).
@@ -136,13 +137,20 @@ function calcularLayoutHex(hexes) {
 // Nunca se generan estados al azar (podrían ser irresolubles): siempre se
 // parte del estado uniforme (ya "resuelto") y se aplican K pulsos hacia
 // atrás — eso garantiza que existe un camino de vuelta.
+//
+// 5 etapas por nivel: 1 tutorial fijo + 4 etapas reales que crecen en línea
+// recta desde una base fácil hasta `kMax` del nivel elegido — el techo real
+// de dificultad de N1/N2/N3 (ver nucleo/progresion-dificultad.js). `kMin`
+// queda como referencia de a dónde llega aproximadamente la etapa 3 de 4,
+// pero ya no hace falta usarlo aparte: la curva completa lo atraviesa sola.
+const BASE_FACIL = { incluirCentro: true, colores: 2, k: 1 }
+
 function generarSecuenciaRondas(dificultad) {
   const d = PARAMETROS_DIFICULTAD[dificultad]
+  const objetivo = { incluirCentro: d.incluirCentro, colores: d.colores, k: d.kMax }
   return [
-    { incluirCentro: true, colores: 2, k: 1 },
-    { incluirCentro: true, colores: 2, k: 2 },
-    { incluirCentro: d.incluirCentro, colores: d.colores, k: d.kMin },
-    { incluirCentro: d.incluirCentro, colores: d.colores, k: d.kMax },
+    BASE_FACIL,
+    ...generarEtapas(BASE_FACIL, objetivo, 4, ['colores', 'k']),
   ]
 }
 

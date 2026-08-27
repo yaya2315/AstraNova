@@ -9,6 +9,7 @@ import { crearEntrada } from '../nucleo/entrada-unificada.js'
 import { tono, ruido } from '../nucleo/audio-mision.js'
 import { evaluarEstrellas } from '../nucleo/evaluador-estrellas.js'
 import { crearAyuda, registrarDibujo } from '../nucleo/ayuda-paso-a-paso.js'
+import { generarEtapas } from '../nucleo/progresion-dificultad.js'
 
 registrarDibujo('ppe-escudo', () => `
   <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -74,13 +75,16 @@ function generarRonda(azar, config) {
   return { sectores: n, secuencia, paso: 0, resuelto: false, anguloEscudo: anguloInicial }
 }
 
+// 5 etapas por nivel: 1 tutorial fijo + 4 etapas reales que crecen en línea
+// recta desde una base fácil hasta el objetivo de N1/N2/N3 (ver
+// nucleo/progresion-dificultad.js).
+const BASE_FACIL = { sectores: 3, pasos: 1 }
+
 function generarSecuenciaRondas(dificultad) {
   const d = PARAMETROS_DIFICULTAD[dificultad]
   return [
-    { sectores: 3, pasos: 1 },
-    { sectores: 4, pasos: 2 },
-    { sectores: d.sectores, pasos: d.pasos },
-    { sectores: d.sectores, pasos: d.pasos },
+    BASE_FACIL,
+    ...generarEtapas(BASE_FACIL, d, 4, ['sectores', 'pasos']),
   ]
 }
 
@@ -234,7 +238,9 @@ export function crearMision(contenedor, opciones) {
         setTimeout(moverSolAObjetivo, 500)
       }
     } else {
-      if (indiceRonda >= 2) fallosReales += 1
+      // La ronda 0 es el tutorial fijo — no cuenta para las estrellas. Las
+      // 4 rondas reales (1 a 4) sí, todas por igual.
+      if (indiceRonda >= 1) fallosReales += 1
       reproducirFallo(i)
       anunciar('Ahí no está el Sol — probá otra dirección.')
     }
@@ -263,7 +269,7 @@ export function crearMision(contenedor, opciones) {
       metricas: { fallosReales },
       umbrales: [
         { estrellas: 1, descripcion: 'Llegar cerca del Sol', condicion: () => true },
-        { estrellas: 2, descripcion: 'Con pocos giros de más', condicion: (m) => m.fallosReales <= 2 },
+        { estrellas: 2, descripcion: 'Con pocos giros de más', condicion: (m) => m.fallosReales <= 4 },
         { estrellas: 3, descripcion: 'Sin perder de vista al Sol', condicion: (m) => m.fallosReales === 0 },
       ],
     })

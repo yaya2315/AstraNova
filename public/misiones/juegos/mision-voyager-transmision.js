@@ -8,6 +8,7 @@ import { suscribir } from '../nucleo/bucle-animacion.js'
 import { tono, ruido } from '../nucleo/audio-mision.js'
 import { evaluarEstrellas } from '../nucleo/evaluador-estrellas.js'
 import { crearAyuda, registrarDibujo } from '../nucleo/ayuda-paso-a-paso.js'
+import { generarEtapas } from '../nucleo/progresion-dificultad.js'
 
 registrarDibujo('voy-mirar', () => `
   <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -71,13 +72,16 @@ function generarRonda(azar, config) {
   return { posiciones: n, secuencia, fase: 'mostrando', indiceEntrada: 0, resuelto: false }
 }
 
+// 5 etapas por nivel: 1 tutorial fijo + 4 etapas reales que crecen en línea
+// recta desde una base fácil hasta el objetivo de N1/N2/N3 (ver
+// nucleo/progresion-dificultad.js).
+const BASE_FACIL = { posiciones: 3, longitud: 2 }
+
 function generarSecuenciaRondas(dificultad) {
   const d = PARAMETROS_DIFICULTAD[dificultad]
   return [
-    { posiciones: 3, longitud: 2 },
-    { posiciones: 3, longitud: 3 },
-    { posiciones: d.posiciones, longitud: d.longitud },
-    { posiciones: d.posiciones, longitud: d.longitud },
+    BASE_FACIL,
+    ...generarEtapas(BASE_FACIL, d, 4, ['posiciones', 'longitud']),
   ]
 }
 
@@ -233,7 +237,9 @@ export function crearMision(contenedor, opciones) {
         setTimeout(finalizarRonda, 900)
       }
     } else {
-      if (indiceRonda >= 2) fallosReales += 1
+      // La ronda 0 es el tutorial fijo — no cuenta para las estrellas. Las
+      // 4 rondas reales (1 a 4) sí, todas por igual.
+      if (indiceRonda >= 1) fallosReales += 1
       reproducirFallo(i)
       anunciar('Esa no era — mirá de nuevo la secuencia completa.')
       setTimeout(() => { if (!destruido) mostrarSecuencia() }, 600)
@@ -263,7 +269,7 @@ export function crearMision(contenedor, opciones) {
       metricas: { fallosReales },
       umbrales: [
         { estrellas: 1, descripcion: 'Transmitir el mensaje', condicion: () => true },
-        { estrellas: 2, descripcion: 'Con pocos reintentos', condicion: (m) => m.fallosReales <= 2 },
+        { estrellas: 2, descripcion: 'Con pocos reintentos', condicion: (m) => m.fallosReales <= 4 },
         { estrellas: 3, descripcion: 'Sin un solo error', condicion: (m) => m.fallosReales === 0 },
       ],
     })
