@@ -251,8 +251,11 @@ export async function abrirMision(id, opciones = {}) {
       opciones.onSuperada?.({ ...metricas, estrellas })
     }
 
-    fondo.querySelector('.mision-estrellas').textContent =
-      '★'.repeat(estrellas) + '☆'.repeat(3 - estrellas)
+    // Cada estrella es su propio <span> (no un solo string) para poder
+    // animarlas con un pequeño desfase en CSS vía la variable --i.
+    fondo.querySelector('.mision-estrellas').innerHTML = Array.from({ length: 3 }, (_, i) =>
+      `<span class="mision-estrella" style="--i:${i}">${i < estrellas ? '★' : '☆'}</span>`
+    ).join('')
     fondo.querySelector('.mision-debriefing-estado').textContent = exito
       ? 'Misión superada'
       : `Misión no superada${metricas?.razon ? ` — ${metricas.razon}` : ''}`
