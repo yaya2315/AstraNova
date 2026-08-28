@@ -159,7 +159,12 @@ export const Sun = memo(function Sun() {
   const eruptT   = useRef(0)
   const [erupting, setErupting] = useState(false)
 
-  const texture = useMemo(() => loadTexture(withBasePath('/textures/8k_sun.jpg')), [])
+  // Igual que en los planetas: en celular/tablet se usa la versión 2k del Sol
+  // en vez de la 8k — en desktop no cambia nada.
+  const texture = useMemo(
+    () => loadTexture(withBasePath(IS_MOBILE ? '/textures/2k_sun.jpg' : '/textures/8k_sun.jpg')),
+    [],
+  )
 
   const glowTex = useMemo(() => {
     const c = document.createElement('canvas'); c.width = 128; c.height = 128

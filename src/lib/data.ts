@@ -91,6 +91,7 @@ export const planets: PlanetData[] = [
     offset: 2.5,
     color: '#4A90D9',
     textureUrl: withBasePath('/textures/8k_earth_daymap.jpg'),
+    textureUrlMobile: withBasePath('/textures/2k_earth_daymap.jpg'),
     eccentricity: 0.017,
     desc: 'Nuestro hogar. El único planeta con vida conocida.',
     longDesc: 'La Tierra es el tercer planeta del sistema solar y el único conocido que alberga vida. Con un 71% de su superficie cubierta por océanos, su campo magnético y atmósfera rica en oxígeno protegen toda forma de vida conocida.',
