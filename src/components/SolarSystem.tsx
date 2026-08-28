@@ -635,9 +635,14 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
 }) {
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="glass-strong rounded-3xl max-w-[900px] w-full max-h-[85vh] overflow-y-auto p-5 sm:p-8 relative"
+      {/* El card ya NO scrollea a sí mismo (overflow-hidden acá) — el scroll vive
+          en el wrapper interno de abajo. Así los botones X/prev/next, al ser
+          hermanos del contenido scrolleable (no hijos de él), quedan siempre
+          fijos sobre el card sin importar cuánto se haya scrolleado adentro —
+          antes se iban con el scroll y en celular desaparecían de la vista. */}
+      <div className="glass-strong rounded-3xl max-w-[900px] w-full max-h-[85vh] overflow-hidden relative"
         onClick={(e) => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all z-10">
+        <button onClick={onClose} className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
@@ -646,13 +651,14 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
         {/* Prev/Next: en móvil van arriba junto al botón de cerrar (no centrados en
             todo el alto scrolleable, donde terminarían tapando la descripción larga
             al hacer scroll); en desktop mantienen la posición centrada original. */}
-        <button onClick={onPrev} className="absolute left-4 top-4 lg:top-1/2 lg:-translate-y-1/2 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all">
+        <button onClick={onPrev} className="absolute left-4 top-4 lg:top-1/2 lg:-translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
         </button>
-        <button onClick={onNext} className="absolute right-16 lg:right-4 top-4 lg:top-1/2 lg:-translate-y-1/2 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all">
+        <button onClick={onNext} className="absolute right-16 lg:right-4 top-4 lg:top-1/2 lg:-translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-accent-purple transition-all">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
         </button>
 
+        <div className="max-h-[85vh] overflow-y-auto p-5 sm:p-8">
         <div className="flex flex-col lg:flex-row gap-8 items-start">
           <div className="w-full lg:w-[320px] aspect-square rounded-2xl overflow-hidden flex-shrink-0 bg-space-900/50 border border-white/5">
             {/* Este panel abre un SEGUNDO contexto WebGL encima del de la escena
@@ -687,6 +693,7 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
             </div>
 
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -774,16 +781,26 @@ export default function SolarSystem() {
     forceTooltip(c => c + 1)
   }, [])
 
+  // Alturas fijas por breakpoint de ANCHO (440/560/680/800px) asumen que más
+  // ancho == pantalla más grande == más alto también — cierto en portrait,
+  // falso en landscape de celular/tablet: un celular acostado (ej. 812×375)
+  // cruza a los breakpoints sm/md por ancho pero tiene poquísima altura real,
+  // así que esa caja de 560-680px de alto se salía del viewport. `min(NNvh, px)`
+  // deja el número de diseño como techo, pero nunca deja que la caja sea más
+  // alta que un % razonable de lo que la pantalla realmente tiene.
   const view = (
     <div ref={containerRef} className={immersive
       ? 'fixed inset-0 z-[1000] w-screen h-screen bg-space-950 overflow-hidden'
-      : 'relative w-full rounded-2xl overflow-hidden border border-white/[0.04] bg-space-950 h-[440px] sm:h-[560px] md:h-[680px] lg:h-[800px]'
+      : 'relative w-full rounded-2xl overflow-hidden border border-white/[0.04] bg-space-950 h-[min(75vh,440px)] sm:h-[min(78vh,560px)] md:h-[min(80vh,680px)] lg:h-[min(82vh,800px)]'
     }>
 
       {/* Immersive button — top left. Sin etiqueta de texto en pantallas angostas
-          (icono solo) para no chocar con el control de velocidad de la derecha. */}
+          (icono solo) para no chocar con el control de velocidad de la derecha.
+          En lg+ se baja a top-16: el DeepNavHUD (↑ Volver + puntos de profundidad,
+          fixed top-5 en desktop) reclama esa misma franja superior — sin este
+          espacio los dos controles quedaban pegados/pisándose en compu. */}
       <button onClick={toggleImmersive}
-        className="absolute top-4 left-4 z-20 flex items-center gap-2 glass rounded-full px-2.5 sm:px-3.5 py-1.5 text-slate-400 hover:text-white transition-colors">
+        className="absolute top-4 left-4 lg:top-16 lg:left-6 z-20 flex items-center gap-2 glass rounded-full px-2.5 sm:px-3.5 py-1.5 text-slate-400 hover:text-white transition-colors">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
           {immersive
             ? <><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></>
@@ -794,8 +811,10 @@ export default function SolarSystem() {
       </button>
 
       {/* Speed control — top right. Más compacto en móvil: sin ícono de reloj
-          y botones más angostos para no superponerse con el botón inmersivo. */}
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-0.5 sm:gap-1 glass rounded-full px-1.5 sm:px-3 py-1.5">
+          y botones más angostos para no superponerse con el botón inmersivo.
+          Mismo ajuste lg:top-16 que el botón inmersivo, por la misma razón
+          (despejar la franja del DeepNavHUD en desktop). */}
+      <div className="absolute top-4 right-4 lg:top-16 lg:right-6 z-20 flex items-center gap-0.5 sm:gap-1 glass rounded-full px-1.5 sm:px-3 py-1.5">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="hidden sm:block text-accent-purple mr-1 flex-shrink-0">
           <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
         </svg>
@@ -860,10 +879,14 @@ export default function SolarSystem() {
       )}
 
       {/* Pilotear nave — un solo modo de vuelo libre por TODO el sistema, no atado
-          a ningún planeta en particular (independiente de `selected`). */}
+          a ningún planeta en particular (independiente de `selected`). Va en la
+          esquina inferior IZQUIERDA (no derecha): el botón flotante de música
+          (MusicToggle) vive fijo en inferior-derecha en todo el sitio, y como
+          este canvas suele llenar el viewport, ambos terminaban ocupando el
+          mismo punto en pantalla — el de música (z-900) tapaba a este. */}
       {!flying && (
         <button onClick={() => setFlying(true)}
-          className="absolute bottom-5 right-4 z-20 flex items-center gap-2 glass rounded-full px-3 sm:px-4 py-2 text-accent-cyan hover:brightness-125 transition-all border border-accent-cyan/20">
+          className="absolute bottom-5 left-4 lg:bottom-6 lg:left-6 z-20 flex items-center gap-2 glass rounded-full px-3 sm:px-4 py-2 text-accent-cyan hover:brightness-125 transition-all border border-accent-cyan/20">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
             <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
             <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
