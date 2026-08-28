@@ -840,14 +840,26 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
           <div className="w-full lg:w-[320px] aspect-square rounded-2xl overflow-hidden flex-shrink-0 bg-space-900/50 border border-white/5">
             {/* Este panel abre un SEGUNDO contexto WebGL encima del de la escena
                 principal — en celular se le baja el dpr y se fuerza low-power
-                para que abrir la ficha de un planeta no se sienta trabado. */}
-            <Canvas camera={{ position: [0, 0, 4], fov: 45 }} dpr={IS_MOBILE ? [0.55, 0.9] : [0.75, 1.25]}
+                para que abrir la ficha de un planeta no se sienta trabado.
+                `key={planet.name}` fuerza que el Canvas se vuelva a montar
+                (cámara y OrbitControls incluidos) al cambiar de planeta con
+                prev/next — si no, la posición/zoom de la cámara quedaba
+                pegada del planeta anterior en vez de arrancar fresca. Esto
+                es lo que permite además que Saturno/planetas con anillo
+                arranquen con la cámara más atrás (ver abajo) sin que eso
+                "se herede" al pasar a un planeta sin anillos. */}
+            <Canvas key={planet.name} camera={{ position: [0, 0, planet.rings ? 15 : 4], fov: 45 }} dpr={IS_MOBILE ? [0.55, 0.9] : [0.75, 1.25]}
               gl={{ antialias: false, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, ...(IS_MOBILE ? { powerPreference: 'low-power' as const } : {}) }}>
               <ambientLight intensity={0.4} color="#334466" />
               <directionalLight position={[5, 3, 5]} intensity={1.2} color="#fff0dd" />
               <directionalLight position={[-4, 2, -5]} intensity={0.5} color="#6680cc" />
               <PlanetDetailMesh data={planet} />
-              <OrbitControls enableZoom enableDamping dampingFactor={0.08} minDistance={2} maxDistance={8} autoRotate autoRotateSpeed={1.5} />
+              {/* Los anillos de Saturno se extienden mucho más allá de la esfera
+                  (hasta 2.4× su radio) — con la distancia/zoom normal de los
+                  demás planetas la cámara quedaba prácticamente adentro del
+                  anillo, por eso se veía tan cerca que no se distinguía nada.
+                  Con anillos: arranca más atrás y se le da más rango de zoom. */}
+              <OrbitControls enableZoom enableDamping dampingFactor={0.08} minDistance={2} maxDistance={planet.rings ? 22 : 8} autoRotate autoRotateSpeed={1.5} />
             </Canvas>
           </div>
 
