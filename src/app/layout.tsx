@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import '../../style-general.css'
+import AnimatedFavicon from '@/components/AnimatedFavicon'
 
 export const metadata: Metadata = {
   title: 'ASTRA NOVA — Explora el Universo',
@@ -24,7 +25,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="ls-pre antialiased">{children}</body>
+      <body className="ls-pre antialiased">
+        <AnimatedFavicon />
+        {children}
+      </body>
     </html>
   )
 }
