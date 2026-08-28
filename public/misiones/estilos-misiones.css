@@ -371,6 +371,7 @@ body.mision-abierta {
 }
 
 .mision-fase-juego {
+  position: relative;
   padding: var(--e-4);
   align-items: stretch;
 }
@@ -378,6 +379,40 @@ body.mision-abierta {
   flex: 1;
   min-height: 0;
   display: flex;
+}
+
+/* Aviso breve al pasar de un nivel al siguiente sin volver al briefing —
+   se ve un instante sobre el juego recién resuelto y desaparece solo. */
+.mision-transicion-nivel {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--e-6);
+  background: rgba(4, 6, 12, .55);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity .3s ease;
+  pointer-events: none;
+}
+.mision-transicion-nivel--visible {
+  opacity: 1;
+}
+.mision-transicion-nivel span {
+  font-family: var(--mision-font-display);
+  font-size: var(--hud-dato);
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: #fff;
+  text-shadow: 0 2px 16px color-mix(in srgb, var(--acento-mision) 60%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mision-transicion-nivel {
+    transition: none;
+  }
 }
 
 .mision-briefing-objetivo {

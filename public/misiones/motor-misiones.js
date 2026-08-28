@@ -322,14 +322,37 @@ export async function abrirMision(id, opciones = {}) {
     instanciaJuego.on('superada', (metricas) => {
       const { progreso, desbloqueoNuevoNivel } = registrarNivelSuperado(id, dificultad)
       progresoMision = progreso
-      let notaDesbloqueo = ''
-      if (desbloqueoNuevoNivel) {
-        notaDesbloqueo = ` · ¡Desbloqueaste el nivel N${progresoMision.maxDesbloqueado}!`
-        dificultad = progresoMision.maxDesbloqueado
-        guardarDificultadPreferida(dificultad)
-      }
       reflejarControles()
-      mostrarDebriefing(true, metricas, notaDesbloqueo)
+
+      // Mientras queden niveles por delante, se pasa directo al siguiente
+      // (sin volver al briefing ni mostrar REINTENTAR/SALIR todavía) — la
+      // misión completa es N1 → N2 → N3 de corrido, cada vez más difícil.
+      // Recién al superar N3 aparece el debriefing final.
+      if (dificultad < 3) {
+        const siguienteNivel = dificultad + 1
+        const texto = desbloqueoNuevoNivel
+          ? `¡Nivel N${siguienteNivel} desbloqueado!`
+          : `Pasando al nivel N${siguienteNivel}…`
+        dificultad = siguienteNivel
+        guardarDificultadPreferida(dificultad)
+        reflejarControles()
+
+        const instanciaTerminada = instanciaJuego
+        const toast = document.createElement('div')
+        toast.className = 'mision-transicion-nivel'
+        toast.innerHTML = `<span>${texto}</span>`
+        nodoJuego.appendChild(toast)
+        requestAnimationFrame(() => toast.classList.add('mision-transicion-nivel--visible'))
+
+        setTimeout(() => {
+          toast.remove()
+          instanciaTerminada.destruir()
+          iniciarJuego()
+        }, 1400)
+        return
+      }
+
+      mostrarDebriefing(true, metricas)
     })
     instanciaJuego.on('fallada', (razon) => mostrarDebriefing(false, { razon }))
     instanciaJuego.iniciar()

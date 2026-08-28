@@ -12,17 +12,25 @@ import { Sun, Planet, OrbitPaths, AsteroidBelt, Comets, SUN_RADIUS } from './Sol
 // el cliente, así que chequear window acá arriba es seguro.
 const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth < 768
 
-const MAX_TURN_RATE = 1.6     // rad/s al arrastrar hasta el borde
+const MAX_TURN_RATE = 1.6     // rad/s al arrastrar hasta el borde (o con A/D a fondo)
 const MAX_DRAG_PX = 140       // arrastre (px) para llegar al giro máximo
 const BASE_SPEED = 9          // unidades/seg a 1x de empuje
-const MIN_THRUST = 0
+const MIN_THRUST = -0.6       // empuje mínimo — un poco de reversa al frenar a fondo con S
 const MAX_THRUST = 3
-const THRUST_STEP = 0.25
 const START_DISTANCE = 95     // más allá de Neptuno (orbit≈48), vista de conjunto al entrar
 const MAX_DISTANCE = 95       // contención: no alejarse más allá del borde del sistema
 const AUTOPILOT_TURN = 1.5    // rad/s de corrección al pasarse del límite exterior
 const COLLISION_BUFFER = 1.5  // margen extra sobre el radio real de cada cuerpo
 const CAMERA_FOV = 50         // lente más cerrado — menos "ojo de pez", da sensación de mayor escala
+
+// Manejo por teclado — W/↑ acelera, S/↓ frena (o da reversa), A/D o ←/→
+// giran, Z activa el turbo. En celular/tablet no hay teclado: el botón de
+// "acelerar" de la esquina hace exactamente lo mismo que mantener W.
+const THRUST_ACCEL = 1.7      // unidades de empuje por segundo con W/↑ (o el botón táctil)
+const BRAKE_ACCEL = 2.6       // frenar es más brusco que acelerar
+const THRUST_DECAY = 0.5      // "arrastre" pasivo: sin acelerar ni frenar, el empuje decae solo
+const TURBO_BONUS = 1.8       // empuje extra máximo alcanzable con Z
+const TURBO_ACCEL_MULT = 1.7  // con Z, acelera más rápido hacia ese máximo
 
 type BodyEntry = { obj: THREE.Object3D; radius: number; label: string }
 
@@ -244,10 +252,13 @@ function Cockpit() {
    planeta sea ni dónde esté en su órbita en ese instante.
    Contención exterior: más allá de MAX_DISTANCE un "autopiloto" gira suavemente de
    vuelta hacia el centro del sistema en vez de dejar volar a la nave para siempre. */
-function FlightRig({ steerRef, thrustRef, bodyRefs, onBoundsChange, onNearestChange }: {
+function FlightRig({ steerRef, thrustRef, bodyRefs, keysRef, touchAccelRef, regresarRef, onBoundsChange, onNearestChange }: {
   steerRef: React.RefObject<{ x: number; y: number }>
   thrustRef: React.RefObject<number>
   bodyRefs: React.RefObject<Map<string, BodyEntry>>
+  keysRef: React.RefObject<Set<string>>
+  touchAccelRef: React.RefObject<boolean>
+  regresarRef: React.RefObject<boolean>
   onBoundsChange: (out: boolean) => void
   onNearestChange: (label: string | null) => void
 }) {
@@ -257,17 +268,62 @@ function FlightRig({ steerRef, thrustRef, bodyRefs, onBoundsChange, onNearestCha
   const wasOut = useRef(false)
   const lastNearestLabel = useRef<string | null>(null)
 
-  useLayoutEffect(() => {
+  const posicionInicial = useCallback(() => {
     camera.position.set(0, 24, START_DISTANCE)
     camera.quaternion.identity()
     yaw.current = 0
     pitch.current = 0
   }, [camera])
 
+  useLayoutEffect(() => { posicionInicial() }, [posicionInicial])
+
+  // Teclado: se escucha en window (no en el canvas) para que funcione sin
+  // importar dónde esté el foco. preventDefault en las teclas usadas evita
+  // que las flechas hagan scroll de la página de fondo mientras se vuela.
+  useEffect(() => {
+    const TECLAS_USADAS = new Set(['w', 'a', 's', 'd', 'z', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'])
+    function alPresionar(e: KeyboardEvent) {
+      const tecla = e.key.toLowerCase()
+      if (!TECLAS_USADAS.has(tecla)) return
+      e.preventDefault()
+      keysRef.current.add(tecla)
+    }
+    function alSoltar(e: KeyboardEvent) {
+      keysRef.current.delete(e.key.toLowerCase())
+    }
+    function alPerderFoco() {
+      keysRef.current.clear()
+    }
+    window.addEventListener('keydown', alPresionar)
+    window.addEventListener('keyup', alSoltar)
+    window.addEventListener('blur', alPerderFoco)
+    return () => {
+      window.removeEventListener('keydown', alPresionar)
+      window.removeEventListener('keyup', alSoltar)
+      window.removeEventListener('blur', alPerderFoco)
+      keysRef.current.clear()
+    }
+  }, [keysRef])
+
   useFrame((_, delta) => {
+    // Botón "VOLVER AL SISTEMA" — te devuelve de un salto al punto de
+    // entrada en vez de dejarte esperar a que el autopiloto te gire solo.
+    if (regresarRef.current) {
+      regresarRef.current = false
+      posicionInicial()
+      thrustRef.current = 0
+      if (wasOut.current) { wasOut.current = false; onBoundsChange(false) }
+      return
+    }
+
     const distToCenter = camera.position.length()
     const outOfBounds = distToCenter > MAX_DISTANCE
     if (outOfBounds !== wasOut.current) { wasOut.current = outOfBounds; onBoundsChange(outOfBounds) }
+
+    const keys = keysRef.current
+    const girarIzq = keys.has('a') || keys.has('arrowleft')
+    const girarDer = keys.has('d') || keys.has('arrowright')
+    const keySteerX = (girarDer ? 1 : 0) - (girarIzq ? 1 : 0)
 
     if (outOfBounds) {
       const toCenter = camera.position.clone().negate().normalize()
@@ -277,11 +333,32 @@ function FlightRig({ steerRef, thrustRef, bodyRefs, onBoundsChange, onNearestCha
       yaw.current = e.y; pitch.current = e.x
     } else {
       const steer = steerRef.current
-      yaw.current   += -steer.x * MAX_TURN_RATE * delta
+      const steerX = Math.max(-1, Math.min(1, steer.x + keySteerX))
+      yaw.current   += -steerX * MAX_TURN_RATE * delta
       pitch.current += -steer.y * MAX_TURN_RATE * delta
       pitch.current = Math.max(-1.15, Math.min(1.15, pitch.current))
       camera.quaternion.setFromEuler(new THREE.Euler(pitch.current, yaw.current, 0, 'YXZ'))
     }
+
+    // Empuje: W/↑ (o mantener el botón táctil) acelera, S/↓ frena, Z da
+    // turbo. Sin ninguno de los tres, el empuje decae solo — así en celular,
+    // donde no hay tecla de freno, alcanza con soltar el botón para bajar
+    // la velocidad de a poco.
+    const turboActivo = keys.has('z')
+    const acelerando = keys.has('w') || keys.has('arrowup') || touchAccelRef.current
+    const frenando = keys.has('s') || keys.has('arrowdown')
+    const techoEmpuje = turboActivo ? MAX_THRUST + TURBO_BONUS : MAX_THRUST
+    let empuje = thrustRef.current
+    if (acelerando) {
+      empuje += THRUST_ACCEL * (turboActivo ? TURBO_ACCEL_MULT : 1) * delta
+    } else if (frenando) {
+      empuje -= BRAKE_ACCEL * delta
+    } else if (Math.abs(empuje) > 0.001) {
+      empuje -= empuje * THRUST_DECAY * delta
+    } else {
+      empuje = 0
+    }
+    thrustRef.current = Math.max(MIN_THRUST, Math.min(techoEmpuje, empuje))
 
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
     camera.position.addScaledVector(forward, BASE_SPEED * thrustRef.current * delta)
@@ -353,7 +430,9 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
   const dragRef = useRef({ active: false, startX: 0, startY: 0 })
   const thrustRef = useRef(0)
   const bodyRefs = useRef(new Map<string, BodyEntry>())
-  const [thrustDisplay, setThrustDisplay] = useState(0)
+  const keysRef = useRef(new Set<string>())
+  const touchAccelRef = useRef(false)
+  const regresarRef = useRef(false)
   const [outOfBounds, setOutOfBounds] = useState(false)
   const [nearest, setNearest] = useState<string | null>(null)
 
@@ -376,12 +455,6 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
   const onMove = (e: React.PointerEvent) => { if (dragRef.current.active) updateSteer(e.clientX, e.clientY) }
   const onUp = () => { dragRef.current.active = false; steerRef.current = { x: 0, y: 0 } }
 
-  const adjustThrust = (delta: number) => {
-    const next = Math.max(MIN_THRUST, Math.min(MAX_THRUST, Math.round((thrustRef.current + delta) * 100) / 100))
-    thrustRef.current = next
-    setThrustDisplay(next)
-  }
-
   return createPortal(
     <div
       className="fixed inset-0 z-[1000] bg-black cursor-grab active:cursor-grabbing"
@@ -392,6 +465,7 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
         gl={{ antialias: !IS_MOBILE, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1, powerPreference: 'high-performance' }}>
         <SystemScene bodyRefs={bodyRefs} />
         <FlightRig steerRef={steerRef} thrustRef={thrustRef} bodyRefs={bodyRefs}
+          keysRef={keysRef} touchAccelRef={touchAccelRef} regresarRef={regresarRef}
           onBoundsChange={setOutOfBounds} onNearestChange={setNearest} />
         <Cockpit />
       </Canvas>
@@ -403,10 +477,14 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
       </div>
 
       {outOfBounds && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 glass-strong rounded-full px-4 py-2 pointer-events-none">
-          <span className="font-display text-[0.55rem] tracking-[2px] text-accent-cyan">
-            LÍMITE DEL SISTEMA — REGRESANDO AL CENTRO
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 glass-strong rounded-full pl-4 pr-2 py-2 flex items-center gap-3">
+          <span className="font-display text-[0.55rem] tracking-[2px] text-accent-cyan whitespace-nowrap pointer-events-none">
+            LÍMITE DEL SISTEMA
           </span>
+          <button onClick={() => { regresarRef.current = true }}
+            className="font-display text-[0.55rem] tracking-[1.5px] px-3 py-1.5 rounded-full bg-accent-cyan/20 text-accent-cyan hover:bg-accent-cyan/30 active:bg-accent-cyan/40 transition-colors whitespace-nowrap">
+            VOLVER AL SISTEMA
+          </button>
         </div>
       )}
 
@@ -424,21 +502,32 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
         <span className="font-display text-[0.6rem] tracking-[2px]">VOLVER</span>
       </button>
 
-      {/* Control de empuje — botones, no comparte gesto con el arrastre de dirección */}
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-1 glass-strong rounded-full px-2 py-1.5">
-        <button onClick={() => adjustThrust(-THRUST_STEP)}
-          className="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/15 transition-colors font-display text-sm">−</button>
-        <span className="font-display text-[0.6rem] tracking-[1px] text-accent-cyan w-10 text-center">{thrustDisplay.toFixed(2)}x</span>
-        <button onClick={() => adjustThrust(THRUST_STEP)}
-          className="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/15 transition-colors font-display text-sm">+</button>
-      </div>
+      {/* En celular/tablet no hay teclado — este botón hace lo mismo que
+          mantener W: acelera mientras se lo mantiene tocado, y al soltarlo
+          el empuje decae solo (no hace falta un botón de freno aparte). En
+          escritorio no se muestra: ahí el control es 100% con el teclado. */}
+      {IS_MOBILE && (
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); touchAccelRef.current = true }}
+          onPointerUp={(e) => { e.stopPropagation(); touchAccelRef.current = false }}
+          onPointerLeave={() => { touchAccelRef.current = false }}
+          onPointerCancel={() => { touchAccelRef.current = false }}
+          className="absolute bottom-6 right-5 z-20 w-16 h-16 rounded-full glass-strong flex items-center justify-center text-accent-cyan active:bg-accent-cyan/20 active:scale-95 transition-transform select-none"
+          style={{ touchAction: 'none' }}
+          aria-label="Mantené presionado para acelerar"
+        >
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l7 12H5l7-12z" />
+          </svg>
+        </button>
+      )}
 
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 font-display text-[0.55rem] tracking-[3px] text-slate-400 flex items-center gap-2.5 pointer-events-none whitespace-nowrap">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
           className="animate-[dragHint_2s_ease-in-out_infinite] flex-shrink-0">
           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
         </svg>
-        ARRASTRA PARA DIRIGIR — +/− PARA ACELERAR
+        {IS_MOBILE ? 'ARRASTRÁ PARA DIRIGIR — MANTENÉ ▲ PARA ACELERAR' : 'ARRASTRÁ O A/D PARA GIRAR — W/S ACELERAR Y FRENAR — Z TURBO'}
       </div>
     </div>,
     document.body
