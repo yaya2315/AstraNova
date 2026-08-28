@@ -7,11 +7,10 @@ import { useEffect } from 'react'
 // Los navegadores NO animan favicons SVG/GIF de forma confiable (casi todos
 // se quedan con el primer cuadro) — la única forma real de que "se mueva"
 // en la pestaña es dibujarlo en un <canvas> oculto y volcarlo como PNG al
-// <link rel="icon"> cada cierto intervalo. Esto sí funciona en Chrome, Edge,
-// Opera y Firefox mientras la pestaña siga cargada (no hace falta que esté
-// enfocada). src/app/icon.svg queda como ícono estático de respaldo: se ve
-// desde el primer instante (antes de hidratar) y sigue ahí si el usuario
-// tiene "reducir movimiento" activado o está en celular.
+// ícono de la pestaña cada cierto intervalo. src/app/icon.svg queda como
+// ícono estático de respaldo: se ve desde el primer instante (antes de
+// hidratar) y sigue ahí si el usuario tiene "reducir movimiento" activado o
+// está en celular.
 const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth < 768
 const SIZE = 64
 const CENTER = SIZE / 2
@@ -36,21 +35,21 @@ export default function AnimatedFavicon() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Reutiliza el MISMO <link rel="icon"> que Next.js ya puso en el <head>
-    // para icon.svg, en vez de agregar uno nuevo al lado — con dos links de
-    // ícono compitiendo, la mayoría de los navegadores se quedan mostrando
-    // el primero para siempre y nunca notan los cambios en el segundo (por
-    // eso se veía estático). Sobreescribiendo el href del mismo elemento,
-    // el navegador sí lo redibuja cada vez.
-    const existing = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
-    const originalHref = existing?.getAttribute('href') ?? null
-    const originalType = existing?.getAttribute('type') ?? null
-    const iconLink: HTMLLinkElement = existing ?? document.createElement('link')
-    if (!existing) {
-      iconLink.rel = 'icon'
-      document.head.appendChild(iconLink)
-    }
-    iconLink.type = 'image/png'
+    // Guarda el ícono original (icon.svg) tal cual estaba en el HTML, para
+    // devolverlo intacto si este componente se desmonta.
+    const original = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
+    const originalOuterHTML = original?.outerHTML ?? null
+    original?.remove()
+
+    // A diferencia del intento anterior (reescribir el `href` de un mismo
+    // <link>), acá se crea un <link> NUEVO en cada cuadro y se borra el
+    // anterior recién después de insertar el que sigue. Varios Chromium
+    // (Chrome, Edge, Opera — el navegador de la captura) dejan de redibujar
+    // el ícono de la pestaña si solo se le cambia el `href` al mismo nodo
+    // repetidas veces; forzando un nodo <link> distinto por cuadro, el
+    // navegador sí lo nota y lo repinta cada vez. Es la técnica que de verdad
+    // funciona para favicons animados vía canvas.
+    let currentLink: HTMLLinkElement | null = null
 
     const t0 = performance.now()
 
@@ -84,31 +83,34 @@ export default function AnimatedFavicon() {
         ctx.fill()
       }
 
-      iconLink.href = canvas.toDataURL('image/png')
+      const next = document.createElement('link')
+      next.rel = 'icon'
+      next.type = 'image/png'
+      next.href = canvas.toDataURL('image/png')
+      document.head.appendChild(next)
+      currentLink?.remove()
+      currentLink = next
     }
 
-    // setInterval en vez de requestAnimationFrame a propósito: rAF se PAUSA
-    // por completo en cuanto la pestaña pierde el foco o pasa a segundo
-    // plano (por diseño del navegador, para ahorrar batería) — por eso el
-    // ícono giraba un poco al cargar y luego se quedaba congelado apenas el
-    // usuario dejaba de mirar esa pestaña. setInterval sigue corriendo en
-    // segundo plano (como mucho el navegador lo espacía un poco más), que es
-    // justo lo que hace falta para que seguir "girando" tenga sentido: un
-    // ícono animado que solo se mueve con la pestaña activa no cumple su
-    // propósito.
+    // setInterval en vez de requestAnimationFrame: rAF se pausa por completo
+    // en cuanto la pestaña pierde el foco o pasa a segundo plano — acá
+    // interesa que el ícono siga "vivo" incluso sin estar mirándolo.
     draw()
     const interval = setInterval(draw, 100)
+    // Al volver a la pestaña (o si el navegador frenó el intervalo mientras
+    // estuvo en segundo plano), fuerza un cuadro fresco de inmediato.
+    const onVisible = () => { if (!document.hidden) draw() }
+    document.addEventListener('visibilitychange', onVisible)
 
     return () => {
       clearInterval(interval)
-      // Se restaura el ícono estático original (icon.svg) en vez de borrar
-      // el <link> — es el mismo elemento que usa el resto del sitio, no uno
-      // exclusivo de este componente.
-      if (originalHref !== null) {
-        iconLink.setAttribute('href', originalHref)
-        if (originalType !== null) iconLink.setAttribute('type', originalType)
-      } else {
-        iconLink.remove()
+      document.removeEventListener('visibilitychange', onVisible)
+      currentLink?.remove()
+      if (originalOuterHTML) {
+        const wrapper = document.createElement('div')
+        wrapper.innerHTML = originalOuterHTML
+        const restored = wrapper.firstElementChild
+        if (restored) document.head.appendChild(restored)
       }
     }
   }, [])
