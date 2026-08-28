@@ -155,35 +155,31 @@ function SolarEruption({ active }: { active: boolean }) {
   )
 }
 
-/* ====== SOLAR PROMINENCE (onda solar ambiental) ======
+/* ====== SOLAR SHOCKWAVE (onda solar ambiental) ======
    A diferencia de SolarEruption (que solo dispara al hacer click), esto es
-   un lazo de plasma que nace solo, cada cierto tiempo, en un punto al azar
-   de la superficie — como las eyecciones de masa coronal reales. Solo en
-   computadora (`!IS_MOBILE`): es decorativo, y el Sol en celular ya usa la
-   textura liviana para no pesar la carga. Construido con lo básico de
-   three.js (una curva Catmull-Rom + TubeGeometry + una textura de canvas
-   para el brillo de la punta), sin shaders nuevos ni assets externos. */
-function buildProminenceCurve(): THREE.CatmullRomCurve3 {
-  // Espacio local sin escalar: nace en el origen (superficie del sol),
-  // se arquea hacia "arriba" (+Y, que luego se orienta hacia afuera del
-  // Sol) y vuelve a bajar cerca de otro punto de la superficie — un lazo.
-  return new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(0.20, 0.50, 0.07),
-    new THREE.Vector3(0.06, 0.92, 0.18),
-    new THREE.Vector3(-0.16, 0.58, 0.06),
-    new THREE.Vector3(-0.06, 0.04, 0),
-  ])
-}
+   una onda que nace sola, cada cierto tiempo, en un punto al azar de la
+   superficie del Sol — se separa de él, crece y se desvanece a medida que
+   se aleja, como una onda expansiva. Nunca viaja más allá de la órbita de
+   Mercurio (data.orbit=5.5): se desvanece del todo bastante antes de esa
+   distancia. Solo en computadora (`!IS_MOBILE`). Construido con lo básico
+   de three.js (RingGeometry + un flash de canvas), sin shaders nuevos. */
+const SHOCKWAVE_MAX_DIST = 4.3 // < 5.5 (órbita de Mercurio), con margen de sobra
 
-function SolarProminenceArc({ index }: { index: number }) {
-  const groupRef = useRef<THREE.Group>(null!)
+function SolarShockwave({ index }: { index: number }) {
+  // El anillo (viaja y crece) y el destello de origen (se queda fijo en el
+  // punto de nacimiento) son grupos independientes a propósito — si el
+  // destello colgara del mismo grupo que el anillo, el `scale` creciente
+  // del anillo también lo agrandaría a él y el `position` animado lo
+  // arrastraría junto con la onda en vez de quedarse quieto donde nació.
+  const ringRef  = useRef<THREE.Group>(null!)
   const matRef   = useRef<THREE.MeshBasicMaterial>(null!)
-  const tipRef   = useRef<THREE.Sprite>(null!)
+  const flashGroupRef = useRef<THREE.Group>(null!)
+  const flashRef = useRef<THREE.Sprite>(null!)
 
-  const curve = useMemo(() => buildProminenceCurve(), [])
-  const geo   = useMemo(() => new THREE.TubeGeometry(curve, 24, 1, 6, false), [curve])
-  const tipTex = useMemo(() => {
+  // Anillo delgado (no un disco relleno) — banda entre 0.82 y 1 de radio,
+  // que luego se escala como grupo para crecer con el tiempo.
+  const geo = useMemo(() => new THREE.RingGeometry(0.82, 1, 48, 1), [])
+  const flashTex = useMemo(() => {
     const c = document.createElement('canvas'); c.width = 64; c.height = 64
     const ctx = c.getContext('2d')!
     const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
@@ -198,16 +194,17 @@ function SolarProminenceArc({ index }: { index: number }) {
   const stateRef = useRef({
     active: false,
     t: 0,
-    duration: 4.5,
+    duration: 5,
     // arranques escalonados por instancia para que no salgan todas a la vez
     cooldown: 4 + index * 6 + Math.random() * 6,
     normal: new THREE.Vector3(0, 1, 0),
   })
 
-  useFrame((rs, delta) => {
+  useFrame((_, delta) => {
     const s = stateRef.current
-    const g = groupRef.current
-    if (!g) return
+    const ring  = ringRef.current
+    const flash = flashGroupRef.current
+    if (!ring || !flash) return
 
     if (!s.active) {
       s.cooldown -= delta
@@ -219,28 +216,41 @@ function SolarProminenceArc({ index }: { index: number }) {
           Math.sin(phi) * Math.sin(theta),
           Math.cos(phi),
         )
-        g.position.copy(s.normal).multiplyScalar(SUN_RADIUS * 0.99)
-        g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), s.normal)
+        ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), s.normal)
+        // El destello nace pegado a la superficie y se queda ahí quieto.
+        flash.position.copy(s.normal).multiplyScalar(SUN_RADIUS * 1.01)
         s.active = true
         s.t = 0
-        s.duration = 4 + Math.random() * 2
+        s.duration = 4.5 + Math.random() * 1.5
       }
-      g.visible = false
+      ring.visible = false
+      flash.visible = false
       return
     }
 
     s.t += delta
     const p = Math.min(s.t / s.duration, 1)
-    const grow = Math.min(1, p / 0.3)                          // se despliega en el primer 30%
-    const fade = p < 0.55 ? 1 : Math.max(0, 1 - (p - 0.55) / 0.45) // se desvanece en el último 45%
-    const finalScale = SUN_RADIUS * 1.3
+    const ease = 1 - Math.pow(1 - p, 2) // ease-out: rápido al salir, más lento al final
 
-    g.visible = true
-    // leve vaivén para que no se vea rígido, como una llamarada real
-    g.rotation.z = Math.sin(rs.clock.elapsedTime * 1.3 + index * 2) * 0.06
-    g.scale.setScalar(finalScale * grow)
-    if (matRef.current) matRef.current.opacity = 0.5 * fade
-    if (tipRef.current) (tipRef.current.material as THREE.SpriteMaterial).opacity = fade * 0.9
+    // Se separa del Sol viajando en línea recta hacia afuera (nunca pasa
+    // de SHOCKWAVE_MAX_DIST, bien por debajo de la órbita de Mercurio) y el
+    // anillo mismo crece de chico a más grande, como una onda expandiéndose.
+    const dist = SUN_RADIUS + (SHOCKWAVE_MAX_DIST - SUN_RADIUS) * ease
+    const ringRadius = 0.4 + ease * 1.1
+
+    // Aparece rápido, se mantiene y se apaga del todo bastante antes de t=1
+    // (con distancia de sobra respecto a la órbita de Mercurio).
+    const fadeIn  = Math.min(1, p / 0.12)
+    const fadeOut = p < 0.55 ? 1 : Math.max(0, 1 - (p - 0.55) / 0.35)
+    const opacity = fadeIn * fadeOut
+
+    ring.visible = true
+    ring.position.copy(s.normal).multiplyScalar(dist)
+    ring.scale.setScalar(ringRadius)
+    if (matRef.current) matRef.current.opacity = 0.6 * opacity
+
+    flash.visible = true
+    if (flashRef.current) (flashRef.current.material as THREE.SpriteMaterial).opacity = Math.max(0, 1 - p / 0.18) * 0.9
 
     if (p >= 1) {
       s.active = false
@@ -249,14 +259,19 @@ function SolarProminenceArc({ index }: { index: number }) {
   })
 
   return (
-    <group ref={groupRef} visible={false}>
-      <mesh geometry={geo} scale={[0.055, 1, 0.055]}>
-        <meshBasicMaterial ref={matRef} color="#ff8a3d" transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
-      </mesh>
-      <sprite ref={tipRef} position={[0.06, 0.92, 0.18]} scale={0.32}>
-        <spriteMaterial map={tipTex} transparent blending={THREE.AdditiveBlending} depthWrite={false} opacity={0} />
-      </sprite>
-    </group>
+    <>
+      <group ref={ringRef} visible={false}>
+        <mesh geometry={geo}>
+          <meshBasicMaterial ref={matRef} color="#ff8a3d" transparent opacity={0} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
+        </mesh>
+      </group>
+      {/* Destello breve en el punto de origen — el "chispazo" del nacimiento de la onda */}
+      <group ref={flashGroupRef} visible={false}>
+        <sprite ref={flashRef} scale={0.9}>
+          <spriteMaterial map={flashTex} transparent blending={THREE.AdditiveBlending} depthWrite={false} opacity={0} />
+        </sprite>
+      </group>
+    </>
   )
 }
 
@@ -345,8 +360,8 @@ export const Sun = memo(function Sun() {
       <SolarEruption active={erupting} />
       {!IS_MOBILE && (
         <>
-          <SolarProminenceArc index={0} />
-          <SolarProminenceArc index={1} />
+          <SolarShockwave index={0} />
+          <SolarShockwave index={1} />
         </>
       )}
     </group>
