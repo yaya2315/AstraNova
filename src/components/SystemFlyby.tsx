@@ -39,7 +39,23 @@ const THRUST_DECAY = 0.5      // "arrastre" pasivo: sin acelerar ni frenar, el e
 const TURBO_BONUS = 1.8       // empuje extra máximo alcanzable con Z
 const TURBO_ACCEL_MULT = 1.7  // con Z, acelera más rápido hacia ese máximo
 
-type BodyEntry = { obj: THREE.Object3D; radius: number; label: string }
+type BodyEntry = { obj: THREE.Object3D; radius: number; label: string; color: string }
+
+// Convierte el `data.color` hex de cada planeta (ya usado en toda la app para
+// el aro/halo de cada uno) en el degradado del flash de choque — el centro
+// siempre es blanco (el destello del impacto), el anillo medio toma el color
+// propio del cuerpo. Si por algún motivo no llega color (no debería pasar,
+// todo body registrado trae uno), cae a un naranja genérico.
+function colisionGradient(hex: string | null): string {
+  let r = 255, g = 150, b = 60
+  if (hex) {
+    const clean = hex.replace('#', '')
+    const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean
+    const n = parseInt(full, 16)
+    if (!Number.isNaN(n)) { r = (n >> 16) & 255; g = (n >> 8) & 255; b = n & 255 }
+  }
+  return `radial-gradient(circle, rgba(255,255,255,.95), rgba(${r},${g},${b},.55) 55%, transparent 78%)`
+}
 
 /* ====== GALAXIAS — fondo decorativo lejano, sin física ni colisión ======
    Manchas de luz tipo "sprite" (siempre de cara a la cámara) generadas por
@@ -179,7 +195,7 @@ function TurboFlame({ keysRef, fase }: { keysRef: React.RefObject<Set<string>>; 
   )
 }
 
-function Cockpit({ keysRef }: { keysRef: React.RefObject<Set<string>> }) {
+function Cockpit({ keysRef, colisionActivaRef }: { keysRef: React.RefObject<Set<string>>; colisionActivaRef: React.RefObject<boolean> }) {
   const groupRef = useRef<THREE.Group>(null!)
   const { camera } = useThree()
   const finGeo = useFinGeometry()
@@ -188,6 +204,12 @@ function Cockpit({ keysRef }: { keysRef: React.RefObject<Set<string>> }) {
   useFrame(() => {
     groupRef.current.position.copy(camera.position)
     groupRef.current.quaternion.copy(camera.quaternion)
+    // Se oculta apenas arranca la secuencia de choque: antes se quedaba
+    // flotando ahí, intacta, mientras el texto decía "NAVE DESTRUIDA" — se
+    // veía raro. Vuelve a aparecer sola cuando FlightRig reubica la cámara
+    // en el punto de entrada al terminar la secuencia (colisionActiva pasa
+    // a false de nuevo).
+    groupRef.current.visible = !colisionActivaRef.current
   })
 
   return (
@@ -289,23 +311,26 @@ function Cockpit({ keysRef }: { keysRef: React.RefObject<Set<string>> }) {
    planeta sea ni dónde esté en su órbita en ese instante.
    Contención exterior: más allá de MAX_DISTANCE un "autopiloto" gira suavemente de
    vuelta hacia el centro del sistema en vez de dejar volar a la nave para siempre. */
-function FlightRig({ steerRef, thrustRef, bodyRefs, keysRef, touchAccelRef, regresarRef, onBoundsChange, onNearestChange, onColision }: {
+function FlightRig({ steerRef, thrustRef, bodyRefs, keysRef, touchAccelRef, regresarRef, colisionActivaRef, onBoundsChange, onNearestChange, onColision }: {
   steerRef: React.RefObject<{ x: number; y: number }>
   thrustRef: React.RefObject<number>
   bodyRefs: React.RefObject<Map<string, BodyEntry>>
   keysRef: React.RefObject<Set<string>>
   touchAccelRef: React.RefObject<boolean>
   regresarRef: React.RefObject<boolean>
+  // Compartido con <Cockpit> (afuera de este componente) para poder ocultar
+  // la nave apenas choca — ver el comentario en Cockpit.
+  colisionActivaRef: React.RefObject<boolean>
   onBoundsChange: (out: boolean) => void
   onNearestChange: (label: string | null) => void
-  onColision: (tipo: 'planeta' | 'sol' | null) => void
+  onColision: (tipo: 'planeta' | 'sol' | null, color?: string | null) => void
 }) {
   const { camera } = useThree()
   const yaw = useRef(0)
   const pitch = useRef(0)
   const wasOut = useRef(false)
   const lastNearestLabel = useRef<string | null>(null)
-  const colisionActiva = useRef(false)
+  const colisionActiva = colisionActivaRef
   const colisionTimer = useRef(0)
   const colisionPos = useRef(new THREE.Vector3())
 
@@ -452,7 +477,7 @@ function FlightRig({ steerRef, thrustRef, bodyRefs, keysRef, touchAccelRef, regr
         thrustRef.current = 0
         lastNearestLabel.current = null
         onNearestChange(null)
-        onColision(nearestName === '__sun__' ? 'sol' : 'planeta')
+        onColision(nearestName === '__sun__' ? 'sol' : 'planeta', entry.color)
       }
     }
   })
@@ -467,13 +492,16 @@ const NOOP = () => {}
 function SystemScene({ bodyRefs }: { bodyRefs: React.RefObject<Map<string, BodyEntry>> }) {
   const registerRef = useCallback((name: string, obj: THREE.Object3D | null) => {
     const data = planets.find(p => p.name === name)
-    if (obj && data) bodyRefs.current.set(name, { obj, radius: data.size, label: data.name })
+    if (obj && data) bodyRefs.current.set(name, { obj, radius: data.size, label: data.name, color: data.color })
     else bodyRefs.current.delete(name)
   }, [bodyRefs])
 
   useEffect(() => {
     // El Sol no se mueve — se registra una sola vez con posición fija en el origen.
-    bodyRefs.current.set('__sun__', { obj: { position: new THREE.Vector3(0, 0, 0) } as THREE.Object3D, radius: SUN_RADIUS, label: 'el Sol' })
+    // Color propio (no viene de `data`, el Sol no está en `planets`): un
+    // amarillo-naranja cálido que combina con el resto de su iconografía en
+    // el sitio (glow, erupción solar, etc.)
+    bodyRefs.current.set('__sun__', { obj: { position: new THREE.Vector3(0, 0, 0) } as THREE.Object3D, radius: SUN_RADIUS, label: 'el Sol', color: '#FFDD88' })
     return () => { bodyRefs.current.delete('__sun__') }
   }, [bodyRefs])
 
@@ -503,9 +531,19 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
   const keysRef = useRef(new Set<string>())
   const touchAccelRef = useRef(false)
   const regresarRef = useRef(false)
+  const colisionActivaRef = useRef(false)
   const [outOfBounds, setOutOfBounds] = useState(false)
   const [nearest, setNearest] = useState<string | null>(null)
   const [colision, setColision] = useState<'planeta' | 'sol' | null>(null)
+  // Color del cuerpo contra el que se chocó (data.color de ese planeta, o el
+  // tono propio del Sol) — tiñe el flash/overlay de choque para que Marte
+  // "explote" en rojizo, Saturno en un tono arena, la Tierra en azul, etc.,
+  // en vez de un mismo naranja genérico sin importar contra qué se chocó.
+  const [colisionColor, setColisionColor] = useState<string | null>(null)
+  const handleColision = useCallback((tipo: 'planeta' | 'sol' | null, color?: string | null) => {
+    setColision(tipo)
+    setColisionColor(color ?? null)
+  }, [])
 
   // La capa activa de DeepNavEngine aplica `transform`, lo que convierte a un
   // `position: fixed` descendiente en algo "fijo respecto a esa capa" en vez de
@@ -540,8 +578,9 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
         <SystemScene bodyRefs={bodyRefs} />
         <FlightRig steerRef={steerRef} thrustRef={thrustRef} bodyRefs={bodyRefs}
           keysRef={keysRef} touchAccelRef={touchAccelRef} regresarRef={regresarRef}
-          onBoundsChange={setOutOfBounds} onNearestChange={setNearest} onColision={setColision} />
-        <Cockpit keysRef={keysRef} />
+          colisionActivaRef={colisionActivaRef}
+          onBoundsChange={setOutOfBounds} onNearestChange={setNearest} onColision={handleColision} />
+        <Cockpit keysRef={keysRef} colisionActivaRef={colisionActivaRef} />
       </Canvas>
 
       {/* Mira central */}
@@ -552,13 +591,14 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
 
       {colision && (
         <>
+          {/* El centro del flash siempre arranca blanco (el destello del
+              impacto en sí), pero el anillo medio toma el color propio del
+              cuerpo contra el que se chocó — Marte queda rojizo, Saturno un
+              tono arena/piel, la Tierra azulado, etc. — en vez de un mismo
+              naranja genérico sin importar contra qué se chocó. */}
           <div
             className="absolute inset-0 z-40 pointer-events-none animate-[flashColision_1.8s_ease-out]"
-            style={{
-              background: colision === 'sol'
-                ? 'radial-gradient(circle, rgba(255,244,214,.95), rgba(255,150,40,.45) 55%, transparent 78%)'
-                : 'radial-gradient(circle, rgba(255,255,255,.92), rgba(255,110,60,.4) 55%, transparent 78%)',
-            }}
+            style={{ background: colisionGradient(colisionColor) }}
           />
           <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none animate-[flashColision_1.8s_ease-out]">
             <div className="text-center">

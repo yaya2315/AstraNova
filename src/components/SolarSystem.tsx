@@ -759,6 +759,13 @@ function PlanetDetailMesh({ data }: { data: PlanetData }) {
 export default function SolarSystem() {
   const { depth } = useDeepNav()
   const containerRef = useRef<HTMLDivElement>(null!)
+  // Portal "de destino estable" — ver el comentario grande cerca del return
+  // final para la explicación completa. En corto: siempre se porta `view`,
+  // solo cambia el contenedor (este div en modo normal, document.body en
+  // inmersivo), así React nunca desmonta el Canvas/Scene al entrar o salir
+  // de pantalla completa — evita el flash del contexto WebGL y que el hover
+  // se resetee.
+  const [slotEl, setSlotEl] = useState<HTMLDivElement | null>(null)
   const [hovered, setHovered] = useState<PlanetData | null>(null)
   const [selected, setSelected] = useState<PlanetData | null>(null)
   const mouseRef = useRef({ x: 0, y: 0 })
@@ -965,18 +972,35 @@ export default function SolarSystem() {
     </div>
   )
 
-  // En modo inmersivo, `view` usa `fixed inset-0` para cubrir toda la pantalla
-  // — pero este componente vive dentro de un `.deep-layer` al que DeepNavEngine
-  // le aplica `transform` (mismo motivo que el tooltip de hover y SystemFlybyView
-  // más abajo, ver comentarios ahí). Un ancestro con `transform` distinto de
-  // `none` pasa a ser el "contenedor" de cualquier hijo `position: fixed`, así
-  // que sin portal el overlay NO cubría la pantalla real: quedaba encogido/mal
-  // alineado dentro de esa capa transformada y terminaba por detrás o pisado
-  // por elementos como el SideNav (que sí vive fuera de esa trampa). Portamos
-  // a document.body SOLO mientras `immersive` está activo — en el modo normal
-  // (tarjeta embebida, no fixed) no hace falta y se renderiza en su lugar.
-  if (immersive && typeof document !== 'undefined') {
-    return createPortal(view, document.body)
-  }
-  return view
+  // `view` usa `fixed inset-0` en inmersivo — pero este componente vive dentro
+  // de un `.deep-layer` al que DeepNavEngine le aplica `transform` (mismo
+  // motivo que el tooltip de hover y SystemFlybyView, ver comentarios ahí).
+  // Un ancestro con `transform` distinto de `none` pasa a ser el "contenedor"
+  // de cualquier hijo `position: fixed`, así que sin portal el overlay NO
+  // cubría la pantalla real.
+  //
+  // Antes esto se resolvía portando SOLO cuando `immersive` es true, y
+  // devolviendo `view` sin portar el resto del tiempo — pero cambiar entre
+  // "elemento normal" y "portal" en el valor de retorno hace que React vea un
+  // tipo de nodo distinto en esa posición y desmonte todo el subárbol (Canvas,
+  // Scene, planetas) cada vez que se entra o sale de inmersivo: se perdía el
+  // contexto WebGL (flash) y el hover quedaba en null hasta el próximo
+  // movimiento de mouse — el bug de "las tarjetas de info se pierden en
+  // inmersivo" que reportó el usuario.
+  //
+  // Ahora SIEMPRE se porta — lo único que cambia es el contenedor destino
+  // (este div `slotEl`, que vive en el lugar normal de la página, o
+  // document.body en inmersivo). Un portal que solo cambia de contenedor no
+  // desmonta a sus hijos, así que el Canvas y todo su estado (incluido el
+  // planeta bajo el mouse) sobreviven el cambio de modo sin parpadeo.
+  const portalTarget = immersive
+    ? (typeof document !== 'undefined' ? document.body : null)
+    : slotEl
+
+  return (
+    <>
+      <div ref={setSlotEl} />
+      {portalTarget && createPortal(view, portalTarget)}
+    </>
+  )
 }
