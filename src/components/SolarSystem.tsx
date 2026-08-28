@@ -157,28 +157,50 @@ function SolarEruption({ active }: { active: boolean }) {
 
 /* ====== SOLAR SHOCKWAVE (onda solar ambiental) ======
    A diferencia de SolarEruption (que solo dispara al hacer click), esto es
-   una onda que nace sola, cada cierto tiempo, en un punto al azar de la
-   superficie del Sol — se separa de él, crece y se desvanece a medida que
-   se aleja, como una onda expansiva. Nunca viaja más allá de la órbita de
-   Mercurio (data.orbit=5.5): se desvanece del todo bastante antes de esa
-   distancia. Solo en computadora (`!IS_MOBILE`). Construido con lo básico
-   de three.js (RingGeometry + un flash de canvas), sin shaders nuevos. */
+   un rayo/estela que nace solo, cada cierto tiempo, en un punto al azar de
+   la superficie del Sol — una punta se queda anclada ahí y la otra se
+   estira hacia afuera en línea recta (radial, no un óvalo/anillo cerrado),
+   difuminándose siempre hacia la punta lejana. Nunca llega a la órbita de
+   Mercurio (data.orbit=5.5): la punta más lejana queda bastante antes de
+   esa distancia. Solo en computadora (`!IS_MOBILE`). Construido con lo
+   básico de three.js (CylinderGeometry abierto + textura de canvas con
+   degradado a lo largo), sin shaders nuevos. */
 const SHOCKWAVE_MAX_DIST = 4.3 // < 5.5 (órbita de Mercurio), con margen de sobra
 
 function SolarShockwave({ index }: { index: number }) {
-  // El anillo (viaja y crece) y el destello de origen (se queda fijo en el
-  // punto de nacimiento) son grupos independientes a propósito — si el
-  // destello colgara del mismo grupo que el anillo, el `scale` creciente
-  // del anillo también lo agrandaría a él y el `position` animado lo
-  // arrastraría junto con la onda en vez de quedarse quieto donde nació.
-  const ringRef  = useRef<THREE.Group>(null!)
+  // El rayo (se estira desde el Sol) y el destello de origen (se queda fijo
+  // en el punto de nacimiento) son grupos independientes a propósito — si
+  // el destello colgara del mismo grupo que el rayo, el `scale` creciente
+  // también lo estiraría a él en vez de quedarse quieto donde nació.
+  const beamRef  = useRef<THREE.Group>(null!)
   const matRef   = useRef<THREE.MeshBasicMaterial>(null!)
   const flashGroupRef = useRef<THREE.Group>(null!)
   const flashRef = useRef<THREE.Sprite>(null!)
 
-  // Anillo delgado (no un disco relleno) — banda entre 0.82 y 1 de radio,
-  // que luego se escala como grupo para crecer con el tiempo.
-  const geo = useMemo(() => new THREE.RingGeometry(0.82, 1, 48, 1), [])
+  // Cilindro angosto y abierto (sin tapas) que va de y=0 (base, pegada al
+  // Sol, más ancha) a y=1 (punta, lejos, más angosta) — se traslada la
+  // geometría para que empiece en el origen, así escalar el grupo en Y
+  // estira/encoge el rayo siempre desde el mismo punto de anclaje.
+  const geo = useMemo(() => {
+    const g = new THREE.CylinderGeometry(0.09, 0.32, 1, 10, 1, true)
+    g.translate(0, 0.5, 0)
+    return g
+  }, [])
+
+  // Degradado a lo largo del rayo: opaco en la base (v=0, pegada al Sol) y
+  // transparente en la punta (v=1) — así el extremo lejano siempre se ve
+  // difuminándose, sin importar cuánto se haya estirado todavía.
+  const beamTex = useMemo(() => {
+    const c = document.createElement('canvas'); c.width = 32; c.height = 128
+    const ctx = c.getContext('2d')!
+    const g = ctx.createLinearGradient(0, 0, 0, 128)
+    g.addColorStop(0,    'rgba(255,150,50,0)')
+    g.addColorStop(0.18, 'rgba(255,170,70,0.6)')
+    g.addColorStop(1,    'rgba(255,215,150,0.95)')
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 32, 128)
+    return new THREE.CanvasTexture(c)
+  }, [])
+
   const flashTex = useMemo(() => {
     const c = document.createElement('canvas'); c.width = 64; c.height = 64
     const ctx = c.getContext('2d')!
@@ -200,11 +222,13 @@ function SolarShockwave({ index }: { index: number }) {
     normal: new THREE.Vector3(0, 1, 0),
   })
 
+  const maxLength = SHOCKWAVE_MAX_DIST - SUN_RADIUS // largo máx. del rayo: la punta nunca pasa de SHOCKWAVE_MAX_DIST
+
   useFrame((_, delta) => {
     const s = stateRef.current
-    const ring  = ringRef.current
+    const beam  = beamRef.current
     const flash = flashGroupRef.current
-    if (!ring || !flash) return
+    if (!beam || !flash) return
 
     if (!s.active) {
       s.cooldown -= delta
@@ -216,38 +240,35 @@ function SolarShockwave({ index }: { index: number }) {
           Math.sin(phi) * Math.sin(theta),
           Math.cos(phi),
         )
-        ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), s.normal)
-        // El destello nace pegado a la superficie y se queda ahí quieto.
+        // La base del rayo (grupo entero) se ancla en la superficie y se
+        // orienta para que su eje largo (Y local) apunte hacia afuera,
+        // radial respecto al Sol — "vertical" respecto a él, no de lado.
+        beam.position.copy(s.normal).multiplyScalar(SUN_RADIUS * 0.98)
+        beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), s.normal)
         flash.position.copy(s.normal).multiplyScalar(SUN_RADIUS * 1.01)
         s.active = true
         s.t = 0
         s.duration = 4.5 + Math.random() * 1.5
       }
-      ring.visible = false
+      beam.visible = false
       flash.visible = false
       return
     }
 
     s.t += delta
     const p = Math.min(s.t / s.duration, 1)
-    const ease = 1 - Math.pow(1 - p, 2) // ease-out: rápido al salir, más lento al final
 
-    // Se separa del Sol viajando en línea recta hacia afuera (nunca pasa
-    // de SHOCKWAVE_MAX_DIST, bien por debajo de la órbita de Mercurio) y el
-    // anillo mismo crece de chico a más grande, como una onda expandiéndose.
-    const dist = SUN_RADIUS + (SHOCKWAVE_MAX_DIST - SUN_RADIUS) * ease
-    const ringRadius = 0.4 + ease * 1.1
-
-    // Aparece rápido, se mantiene y se apaga del todo bastante antes de t=1
-    // (con distancia de sobra respecto a la órbita de Mercurio).
-    const fadeIn  = Math.min(1, p / 0.12)
-    const fadeOut = p < 0.55 ? 1 : Math.max(0, 1 - (p - 0.55) / 0.35)
+    // Se estira desde el Sol en el primer 45% del ciclo, se mantiene
+    // extendido, y se desvanece entero hacia el final.
+    const growP = Math.min(1, p / 0.45)
+    const grow  = 1 - Math.pow(1 - growP, 2) // ease-out
+    const fadeIn  = Math.min(1, p / 0.1)
+    const fadeOut = p < 0.6 ? 1 : Math.max(0, 1 - (p - 0.6) / 0.4)
     const opacity = fadeIn * fadeOut
 
-    ring.visible = true
-    ring.position.copy(s.normal).multiplyScalar(dist)
-    ring.scale.setScalar(ringRadius)
-    if (matRef.current) matRef.current.opacity = 0.6 * opacity
+    beam.visible = true
+    beam.scale.set(1, Math.max(0.001, maxLength * grow), 1)
+    if (matRef.current) matRef.current.opacity = 0.85 * opacity
 
     flash.visible = true
     if (flashRef.current) (flashRef.current.material as THREE.SpriteMaterial).opacity = Math.max(0, 1 - p / 0.18) * 0.9
@@ -260,9 +281,9 @@ function SolarShockwave({ index }: { index: number }) {
 
   return (
     <>
-      <group ref={ringRef} visible={false}>
+      <group ref={beamRef} visible={false}>
         <mesh geometry={geo}>
-          <meshBasicMaterial ref={matRef} color="#ff8a3d" transparent opacity={0} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
+          <meshBasicMaterial ref={matRef} map={beamTex} color="#ffb066" transparent opacity={0} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
         </mesh>
       </group>
       {/* Destello breve en el punto de origen — el "chispazo" del nacimiento de la onda */}
