@@ -155,6 +155,111 @@ function SolarEruption({ active }: { active: boolean }) {
   )
 }
 
+/* ====== SOLAR PROMINENCE (onda solar ambiental) ======
+   A diferencia de SolarEruption (que solo dispara al hacer click), esto es
+   un lazo de plasma que nace solo, cada cierto tiempo, en un punto al azar
+   de la superficie — como las eyecciones de masa coronal reales. Solo en
+   computadora (`!IS_MOBILE`): es decorativo, y el Sol en celular ya usa la
+   textura liviana para no pesar la carga. Construido con lo básico de
+   three.js (una curva Catmull-Rom + TubeGeometry + una textura de canvas
+   para el brillo de la punta), sin shaders nuevos ni assets externos. */
+function buildProminenceCurve(): THREE.CatmullRomCurve3 {
+  // Espacio local sin escalar: nace en el origen (superficie del sol),
+  // se arquea hacia "arriba" (+Y, que luego se orienta hacia afuera del
+  // Sol) y vuelve a bajar cerca de otro punto de la superficie — un lazo.
+  return new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0.20, 0.50, 0.07),
+    new THREE.Vector3(0.06, 0.92, 0.18),
+    new THREE.Vector3(-0.16, 0.58, 0.06),
+    new THREE.Vector3(-0.06, 0.04, 0),
+  ])
+}
+
+function SolarProminenceArc({ index }: { index: number }) {
+  const groupRef = useRef<THREE.Group>(null!)
+  const matRef   = useRef<THREE.MeshBasicMaterial>(null!)
+  const tipRef   = useRef<THREE.Sprite>(null!)
+
+  const curve = useMemo(() => buildProminenceCurve(), [])
+  const geo   = useMemo(() => new THREE.TubeGeometry(curve, 24, 1, 6, false), [curve])
+  const tipTex = useMemo(() => {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64
+    const ctx = c.getContext('2d')!
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
+    g.addColorStop(0,    'rgba(255,255,240,1)')
+    g.addColorStop(0.3,  'rgba(255,200,90,0.85)')
+    g.addColorStop(0.7,  'rgba(255,90,20,0.35)')
+    g.addColorStop(1,    'rgba(255,60,0,0)')
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64)
+    return new THREE.CanvasTexture(c)
+  }, [])
+
+  const stateRef = useRef({
+    active: false,
+    t: 0,
+    duration: 4.5,
+    // arranques escalonados por instancia para que no salgan todas a la vez
+    cooldown: 4 + index * 6 + Math.random() * 6,
+    normal: new THREE.Vector3(0, 1, 0),
+  })
+
+  useFrame((rs, delta) => {
+    const s = stateRef.current
+    const g = groupRef.current
+    if (!g) return
+
+    if (!s.active) {
+      s.cooldown -= delta
+      if (s.cooldown <= 0) {
+        const theta = Math.random() * Math.PI * 2
+        const phi   = Math.acos(2 * Math.random() - 1)
+        s.normal.set(
+          Math.sin(phi) * Math.cos(theta),
+          Math.sin(phi) * Math.sin(theta),
+          Math.cos(phi),
+        )
+        g.position.copy(s.normal).multiplyScalar(SUN_RADIUS * 0.99)
+        g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), s.normal)
+        s.active = true
+        s.t = 0
+        s.duration = 4 + Math.random() * 2
+      }
+      g.visible = false
+      return
+    }
+
+    s.t += delta
+    const p = Math.min(s.t / s.duration, 1)
+    const grow = Math.min(1, p / 0.3)                          // se despliega en el primer 30%
+    const fade = p < 0.55 ? 1 : Math.max(0, 1 - (p - 0.55) / 0.45) // se desvanece en el último 45%
+    const finalScale = SUN_RADIUS * 1.3
+
+    g.visible = true
+    // leve vaivén para que no se vea rígido, como una llamarada real
+    g.rotation.z = Math.sin(rs.clock.elapsedTime * 1.3 + index * 2) * 0.06
+    g.scale.setScalar(finalScale * grow)
+    if (matRef.current) matRef.current.opacity = 0.5 * fade
+    if (tipRef.current) (tipRef.current.material as THREE.SpriteMaterial).opacity = fade * 0.9
+
+    if (p >= 1) {
+      s.active = false
+      s.cooldown = 10 + Math.random() * 16
+    }
+  })
+
+  return (
+    <group ref={groupRef} visible={false}>
+      <mesh geometry={geo} scale={[0.055, 1, 0.055]}>
+        <meshBasicMaterial ref={matRef} color="#ff8a3d" transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
+      </mesh>
+      <sprite ref={tipRef} position={[0.06, 0.92, 0.18]} scale={0.32}>
+        <spriteMaterial map={tipTex} transparent blending={THREE.AdditiveBlending} depthWrite={false} opacity={0} />
+      </sprite>
+    </group>
+  )
+}
+
 /* ====== SUN ====== */
 export const Sun = memo(function Sun() {
   const ref      = useRef<THREE.Mesh>(null!)
@@ -238,6 +343,12 @@ export const Sun = memo(function Sun() {
         <spriteMaterial map={glowTex} transparent blending={THREE.AdditiveBlending} depthWrite={false} opacity={0.6} />
       </sprite>
       <SolarEruption active={erupting} />
+      {!IS_MOBILE && (
+        <>
+          <SolarProminenceArc index={0} />
+          <SolarProminenceArc index={1} />
+        </>
+      )}
     </group>
   )
 })
@@ -354,10 +465,33 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
           <meshBasicMaterial color={data.color} transparent opacity={hovered ? 0.12 : 0.05} side={THREE.BackSide} />
         </mesh>
       )}
-      {hovered && (
+      {/* En compu la etiqueta queda siempre visible (antes solo aparecía al
+          pasar el mouse, y a la distancia de cámara normal el texto quedaba
+          casi ilegible) — con el nombre más grande y el tipo de planeta
+          debajo, como en las tarjetas de detalle. En celular no hay "hover"
+          real (ver handleOver/handleOut arriba), así que ahí se mantiene
+          exactamente el comportamiento de antes: sin costo extra. */}
+      {(!IS_MOBILE || hovered) && (
         <Html distanceFactor={15} center style={{ pointerEvents: 'none' }}>
-          <div className="px-4 py-1.5 rounded-full glass-strong text-accent-cyan text-[0.6rem] font-display tracking-[3px] whitespace-nowrap shadow-lg shadow-accent-purple/10 border border-accent-purple/20">
-            {data.name.toUpperCase()}
+          <div className="flex flex-col items-center gap-1 transition-opacity duration-300" style={{ opacity: hovered ? 1 : 0.85 }}>
+            <div
+              className="px-4 py-1.5 rounded-full glass-strong font-display font-bold whitespace-nowrap border transition-all duration-300"
+              style={{
+                fontSize: hovered ? '0.82rem' : '0.7rem',
+                letterSpacing: '2.5px',
+                color: hovered ? '#22D3EE' : 'rgba(224,242,254,0.88)',
+                borderColor: hovered ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.12)',
+                boxShadow: hovered ? '0 0 18px rgba(34,211,238,0.28)' : 'none',
+              }}
+            >
+              {data.name.toUpperCase()}
+            </div>
+            <div
+              className="font-display whitespace-nowrap"
+              style={{ fontSize: '0.46rem', letterSpacing: '2px', color: 'rgba(148,163,184,0.75)' }}
+            >
+              {data.type}
+            </div>
           </div>
         </Html>
       )}
