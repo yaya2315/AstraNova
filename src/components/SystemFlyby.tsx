@@ -12,8 +12,14 @@ import { Sun, Planet, OrbitPaths, AsteroidBelt, Comets, SUN_RADIUS } from './Sol
 // el cliente, así que chequear window acá arriba es seguro.
 const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth < 768
 
-const MAX_TURN_RATE = 1.6     // rad/s al arrastrar hasta el borde (o con A/D a fondo)
-const MAX_DRAG_PX = 140       // arrastre (px) para llegar al giro máximo
+// Sensibilidad de giro: separada por eje. El giro horizontal (izq/der) se
+// tocaba sin querer y giraba de golpe — queda más "duro" que el vertical,
+// con más recorrido de arrastre para llegar al máximo y un techo de
+// velocidad angular más bajo, así responde pero no se dispara con un roce.
+const PITCH_TURN_RATE = 1.6   // rad/s al arrastrar verticalmente hasta el borde
+const YAW_TURN_RATE = 0.95    // rad/s al girar horizontalmente a fondo (drag o A/D)
+const MAX_DRAG_PX_PITCH = 140 // arrastre (px) para llegar al giro vertical máximo
+const MAX_DRAG_PX_YAW = 220   // arrastre (px) para llegar al giro horizontal máximo — más seco
 const BASE_SPEED = 9          // unidades/seg a 1x de empuje
 const MIN_THRUST = -0.6       // empuje mínimo — un poco de reversa al frenar a fondo con S
 const MAX_THRUST = 3
@@ -143,7 +149,36 @@ function useFinGeometry() {
   }, [])
 }
 
-function Cockpit() {
+/* Llama de turbo — un cono chico por motor, invisible por defecto (mesh
+   siempre montado con visible=false: no hay que crear/destruir geometría al
+   entrar y salir de turbo, solo prender/apagar un flag). Mientras Z está
+   presionada, cada cuadro lee el mismo Set de teclas que ya usa FlightRig
+   (sin estado de React, sin re-render) y anima largo/opacidad con un par de
+   senos — nada de partículas ni texturas, el material es un MeshBasicMaterial
+   sin luces (el más barato de Three) con blending aditivo para que "brille". */
+function TurboFlame({ keysRef, fase }: { keysRef: React.RefObject<Set<string>>; fase: number }) {
+  const ref = useRef<THREE.Mesh>(null!)
+  useFrame(({ clock }) => {
+    const mesh = ref.current
+    if (!mesh) return
+    const activo = keysRef.current.has('z')
+    if (mesh.visible !== activo) mesh.visible = activo
+    if (!activo) return
+    const t = clock.elapsedTime * 18 + fase
+    const flicker = 0.75 + Math.sin(t) * 0.2 + Math.sin(t * 2.7) * 0.08
+    mesh.scale.set(1, flicker, 1)
+    const mat = mesh.material as THREE.MeshBasicMaterial
+    mat.opacity = 0.55 + flicker * 0.35
+  })
+  return (
+    <mesh ref={ref} visible={false} position={[0, -0.16, 0]} rotation={[Math.PI, 0, 0]}>
+      <coneGeometry args={[0.05, 0.22, 10]} />
+      <meshBasicMaterial color="#ff9a3d" transparent opacity={0.7} blending={THREE.AdditiveBlending} depthWrite={false} />
+    </mesh>
+  )
+}
+
+function Cockpit({ keysRef }: { keysRef: React.RefObject<Set<string>> }) {
   const groupRef = useRef<THREE.Group>(null!)
   const { camera } = useThree()
   const finGeo = useFinGeometry()
@@ -234,6 +269,7 @@ function Cockpit() {
               <torusGeometry args={[0.055, 0.012, 8, 16]} />
               <meshStandardMaterial color="#ff8a3d" emissive="#ff8a3d" emissiveIntensity={2} />
             </mesh>
+            <TurboFlame keysRef={keysRef} fase={i * 2.1} />
           </group>
         ))}
       </group>
@@ -334,8 +370,8 @@ function FlightRig({ steerRef, thrustRef, bodyRefs, keysRef, touchAccelRef, regr
     } else {
       const steer = steerRef.current
       const steerX = Math.max(-1, Math.min(1, steer.x + keySteerX))
-      yaw.current   += -steerX * MAX_TURN_RATE * delta
-      pitch.current += -steer.y * MAX_TURN_RATE * delta
+      yaw.current   += -steerX * YAW_TURN_RATE * delta
+      pitch.current += -steer.y * PITCH_TURN_RATE * delta
       pitch.current = Math.max(-1.15, Math.min(1.15, pitch.current))
       camera.quaternion.setFromEuler(new THREE.Euler(pitch.current, yaw.current, 0, 'YXZ'))
     }
@@ -447,8 +483,8 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
     const dx = x - dragRef.current.startX
     const dy = y - dragRef.current.startY
     steerRef.current = {
-      x: Math.max(-1, Math.min(1, dx / MAX_DRAG_PX)),
-      y: Math.max(-1, Math.min(1, dy / MAX_DRAG_PX)),
+      x: Math.max(-1, Math.min(1, dx / MAX_DRAG_PX_YAW)),
+      y: Math.max(-1, Math.min(1, dy / MAX_DRAG_PX_PITCH)),
     }
   }
   const onDown = (e: React.PointerEvent) => { dragRef.current = { active: true, startX: e.clientX, startY: e.clientY } }
@@ -467,7 +503,7 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
         <FlightRig steerRef={steerRef} thrustRef={thrustRef} bodyRefs={bodyRefs}
           keysRef={keysRef} touchAccelRef={touchAccelRef} regresarRef={regresarRef}
           onBoundsChange={setOutOfBounds} onNearestChange={setNearest} />
-        <Cockpit />
+        <Cockpit keysRef={keysRef} />
       </Canvas>
 
       {/* Mira central */}
