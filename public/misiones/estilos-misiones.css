@@ -170,6 +170,7 @@ body.mision-abierta {
   border: 1px solid rgba(255, 255, 255, .07);
 }
 .mision-selector-dificultad button {
+  position: relative;
   min-width: 40px;
   min-height: 38px;
   padding: var(--e-1) var(--e-2);
@@ -181,7 +182,7 @@ body.mision-abierta {
   font-size: var(--hud-label);
   letter-spacing: .04em;
   cursor: pointer;
-  transition: background .2s ease, color .2s ease, border-color .2s ease;
+  transition: background .2s ease, color .2s ease, border-color .2s ease, opacity .2s ease;
 }
 .mision-selector-dificultad button:hover {
   color: rgba(255, 255, 255, .8);
@@ -192,6 +193,50 @@ body.mision-abierta {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--acento-mision) 28%, transparent), color-mix(in srgb, var(--acento-mision) 12%, transparent));
   box-shadow: 0 2px 12px color-mix(in srgb, var(--acento-mision) 30%, transparent);
+}
+
+/* Nivel ya superado: se ve "iluminado" con el color de la misión aunque no
+   sea el que está seleccionado ahora mismo — así se distingue de un nivel
+   disponible pero todavía no jugado. */
+.mision-selector-dificultad button.completado:not(.activo) {
+  color: color-mix(in srgb, var(--acento-mision) 85%, #fff);
+  border-color: color-mix(in srgb, var(--acento-mision) 30%, transparent);
+}
+
+/* Nivel bloqueado: hay que superar el anterior primero. Queda apagado y
+   sin interacción, con un candado en la esquina. */
+.mision-selector-dificultad button.bloqueado {
+  opacity: .35;
+  cursor: not-allowed;
+}
+.mision-selector-dificultad button.bloqueado:hover {
+  color: rgba(255, 255, 255, .5);
+}
+.mision-selector-dificultad button:disabled {
+  pointer-events: none;
+}
+
+.mision-nivel-insignia {
+  position: absolute;
+  top: -5px;
+  right: -4px;
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #0b1418;
+  border: 1px solid rgba(255, 255, 255, .15);
+  color: rgba(255, 255, 255, .6);
+}
+.mision-nivel-insignia:empty {
+  display: none;
+}
+.mision-selector-dificultad button.completado .mision-nivel-insignia {
+  background: color-mix(in srgb, var(--acento-mision) 90%, #0b1418);
+  border-color: color-mix(in srgb, var(--acento-mision) 60%, transparent);
+  color: #08110c;
 }
 
 .mision-toggle-accesible {

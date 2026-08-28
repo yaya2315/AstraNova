@@ -23,6 +23,7 @@ const CLAVE_ESTRELLAS = 'astra-mision-estrellas'
 const CLAVE_DIFICULTAD = 'astra-mision-dificultad'
 const CLAVE_ACCESIBLE = 'astra-mision-accesible'
 const CLAVE_SILENCIO = 'astra-mision-silencio'
+const CLAVE_NIVELES = 'astra-mision-niveles'
 
 // Íconos en SVG (no emoji): el emoji de parlante/cerrar se ve distinto según
 // SO y fuente instalada — un trazo propio se ve exactamente igual siempre.
@@ -37,6 +38,13 @@ const ICONO_SONIDO_MUDO = `<svg viewBox="0 0 24 24" width="16" height="16" fill=
 </svg>`
 const ICONO_CERRAR = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+</svg>`
+const ICONO_CANDADO = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <rect x="5" y="11" width="14" height="9" rx="2" fill="currentColor"/>
+  <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+</svg>`
+const ICONO_CHECK = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>`
 
 const cargadores = new Map() // id -> () => Promise<módulo>
@@ -81,6 +89,41 @@ export function obtenerModoAccesiblePreferido() {
 }
 function guardarModoAccesiblePreferido(valor) {
   guardarJSON(CLAVE_ACCESIBLE, valor)
+}
+
+// ── Progreso por nivel (N1/N2/N3) ────────────────────────────────────────
+// Cada misión arranca con N1 desbloqueado y N2/N3 bloqueados. Superar un
+// nivel (terminar sus 5 etapas) lo marca como completado y desbloquea el
+// siguiente. Una vez desbloqueados, un nivel queda disponible para siempre
+// — se puede volver a jugar en cualquier orden.
+function leerProgresoNiveles() {
+  return leerJSON(CLAVE_NIVELES, {})
+}
+function guardarProgresoNiveles(todos) {
+  guardarJSON(CLAVE_NIVELES, todos)
+}
+export function obtenerProgresoNivelesMision(id) {
+  const propio = leerProgresoNiveles()[id]
+  return {
+    maxDesbloqueado: propio?.maxDesbloqueado ?? 1,
+    completados: propio?.completados ?? [],
+  }
+}
+// Registra que se superó `dificultad` en la misión `id`. Devuelve el
+// progreso actualizado y si eso desbloqueó un nivel nuevo (para poder
+// avisarle al jugador y llevarlo directo ahí).
+function registrarNivelSuperado(id, dificultad) {
+  const todos = leerProgresoNiveles()
+  const propio = todos[id] ?? { maxDesbloqueado: 1, completados: [] }
+  const completados = propio.completados.includes(dificultad)
+    ? propio.completados
+    : [...propio.completados, dificultad]
+  const desbloqueoNuevoNivel = dificultad === propio.maxDesbloqueado && dificultad < 3
+  const maxDesbloqueado = desbloqueoNuevoNivel ? dificultad + 1 : propio.maxDesbloqueado
+  const progreso = { maxDesbloqueado, completados }
+  todos[id] = progreso
+  guardarProgresoNiveles(todos)
+  return { progreso, desbloqueoNuevoNivel }
 }
 
 // ── Registro perezoso ────────────────────────────────────────────────────
@@ -130,10 +173,10 @@ function crearEsqueletoModal(id) {
       <header class="mision-cabecera">
         <h2 id="mision-titulo-${id}" class="mision-titulo"></h2>
         <div class="mision-controles-header">
-          <div class="mision-selector-dificultad" role="group" aria-label="Dificultad">
-            <button type="button" data-dificultad="1">N1</button>
-            <button type="button" data-dificultad="2">N2</button>
-            <button type="button" data-dificultad="3">N3</button>
+          <div class="mision-selector-dificultad" role="group" aria-label="Nivel">
+            <button type="button" data-dificultad="1">N1<span class="mision-nivel-insignia" aria-hidden="true"></span></button>
+            <button type="button" data-dificultad="2">N2<span class="mision-nivel-insignia" aria-hidden="true"></span></button>
+            <button type="button" data-dificultad="3">N3<span class="mision-nivel-insignia" aria-hidden="true"></span></button>
           </div>
           <label class="mision-toggle-accesible">
             <input type="checkbox" data-accion="accesible" class="mision-toggle-input" />
@@ -191,7 +234,11 @@ export async function abrirMision(id, opciones = {}) {
   const modal = fondo.querySelector('.mision-modal')
   const quitarTrampa = instalarTrampaFoco(modal)
 
-  let dificultad = opciones.dificultad ?? obtenerDificultadPreferida()
+  let progresoMision = obtenerProgresoNivelesMision(id)
+  // El nivel preferido es global, pero nunca puede pasar por encima del
+  // progreso de ESTA misión en particular: si todavía no superó N1 acá,
+  // arranca en N1 aunque la preferencia global sea N2 o N3.
+  let dificultad = Math.min(opciones.dificultad ?? obtenerDificultadPreferida(), progresoMision.maxDesbloqueado)
   let modoAccesible = opciones.modoAccesible ?? obtenerModoAccesiblePreferido()
   establecerSilencio(leerJSON(CLAVE_SILENCIO, false))
 
@@ -205,9 +252,23 @@ export async function abrirMision(id, opciones = {}) {
 
   function reflejarControles() {
     botonesDificultad.forEach((b) => {
-      const activo = Number(b.dataset.dificultad) === dificultad
+      const nivel = Number(b.dataset.dificultad)
+      const activo = nivel === dificultad
+      const desbloqueado = nivel <= progresoMision.maxDesbloqueado
+      const completado = progresoMision.completados.includes(nivel)
       b.setAttribute('aria-pressed', String(activo))
       b.classList.toggle('activo', activo)
+      b.classList.toggle('completado', completado)
+      b.classList.toggle('bloqueado', !desbloqueado)
+      b.disabled = !desbloqueado
+      b.setAttribute(
+        'aria-label',
+        !desbloqueado
+          ? `Nivel ${nivel}, bloqueado — superá el nivel ${nivel - 1} para desbloquearlo`
+          : `Nivel ${nivel}${completado ? ', ya superado' : ''}`
+      )
+      const insignia = b.querySelector('.mision-nivel-insignia')
+      if (insignia) insignia.innerHTML = !desbloqueado ? ICONO_CANDADO : completado ? ICONO_CHECK : ''
     })
     checkboxAccesible.checked = modoAccesible
     botonSilencio.setAttribute('aria-pressed', String(estaSilenciado()))
@@ -217,7 +278,9 @@ export async function abrirMision(id, opciones = {}) {
 
   botonesDificultad.forEach((b) => {
     b.addEventListener('click', () => {
-      dificultad = Number(b.dataset.dificultad)
+      const nivel = Number(b.dataset.dificultad)
+      if (nivel > progresoMision.maxDesbloqueado) return
+      dificultad = nivel
       guardarDificultadPreferida(dificultad)
       reflejarControles()
     })
@@ -256,12 +319,23 @@ export async function abrirMision(id, opciones = {}) {
       modoAccesible,
       semilla: opciones.semilla ?? Date.now(),
     })
-    instanciaJuego.on('superada', (metricas) => mostrarDebriefing(true, metricas))
+    instanciaJuego.on('superada', (metricas) => {
+      const { progreso, desbloqueoNuevoNivel } = registrarNivelSuperado(id, dificultad)
+      progresoMision = progreso
+      let notaDesbloqueo = ''
+      if (desbloqueoNuevoNivel) {
+        notaDesbloqueo = ` · ¡Desbloqueaste el nivel N${progresoMision.maxDesbloqueado}!`
+        dificultad = progresoMision.maxDesbloqueado
+        guardarDificultadPreferida(dificultad)
+      }
+      reflejarControles()
+      mostrarDebriefing(true, metricas, notaDesbloqueo)
+    })
     instanciaJuego.on('fallada', (razon) => mostrarDebriefing(false, { razon }))
     instanciaJuego.iniciar()
   }
 
-  function mostrarDebriefing(exito, metricas) {
+  function mostrarDebriefing(exito, metricas, notaExtra = '') {
     mostrarFase('debriefing')
     const estrellas = exito ? Math.max(0, Math.min(3, metricas?.estrellas ?? 0)) : 0
     if (exito) {
@@ -275,7 +349,7 @@ export async function abrirMision(id, opciones = {}) {
       `<span class="mision-estrella" style="--i:${i}">${i < estrellas ? '★' : '☆'}</span>`
     ).join('')
     fondo.querySelector('.mision-debriefing-estado').textContent = exito
-      ? 'Misión superada'
+      ? `Misión superada${notaExtra}`
       : `Misión no superada${metricas?.razon ? ` — ${metricas.razon}` : ''}`
     fondo.querySelector('.mision-debriefing-dato').textContent = meta.datoCierre ?? ''
 
