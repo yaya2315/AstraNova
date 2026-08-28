@@ -810,6 +810,18 @@ function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick, flyTarge
 function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
   planet: PlanetData; onClose: () => void; onPrev: () => void; onNext: () => void
 }) {
+  // La cámara de esta ficha estaba fija en z=4 para todos los planetas, así
+  // que cualquiera cuya esfera+halo (o esfera+anillos) ocupe más que eso
+  // terminaba con la cámara metida adentro — pasaba con Saturno (anillos) y
+  // con Júpiter (sin anillos, pero su esfera ya toca el tope de tamaño
+  // igual que la de Saturno). En vez de ir agregando casos sueltos por
+  // planeta, se calcula la distancia según cuánto ocupa cada uno de verdad:
+  // esfera+halo normalmente, o hasta el borde del anillo si tiene.
+  const scaledSize = Math.min(planet.size * 1.8, 2) // mismo cálculo que adentro de PlanetDetailMesh
+  const extent = planet.rings ? scaledSize * 2.4 : scaledSize * 1.28
+  const camDist = Math.max(4, extent * 3.2)
+  const maxZoomOut = camDist * 1.5
+
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center p-4" onClick={onClose}>
       {/* El card ya NO scrollea a sí mismo (overflow-hidden acá) — el scroll vive
@@ -845,21 +857,16 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
                 (cámara y OrbitControls incluidos) al cambiar de planeta con
                 prev/next — si no, la posición/zoom de la cámara quedaba
                 pegada del planeta anterior en vez de arrancar fresca. Esto
-                es lo que permite además que Saturno/planetas con anillo
-                arranquen con la cámara más atrás (ver abajo) sin que eso
-                "se herede" al pasar a un planeta sin anillos. */}
-            <Canvas key={planet.name} camera={{ position: [0, 0, planet.rings ? 15 : 4], fov: 45 }} dpr={IS_MOBILE ? [0.55, 0.9] : [0.75, 1.25]}
+                es lo que permite además que cada planeta arranque con SU
+                propia distancia de cámara (ver camDist arriba) sin que se
+                "herede" la del planeta anterior. */}
+            <Canvas key={planet.name} camera={{ position: [0, 0, camDist], fov: 45 }} dpr={IS_MOBILE ? [0.55, 0.9] : [0.75, 1.25]}
               gl={{ antialias: false, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, ...(IS_MOBILE ? { powerPreference: 'low-power' as const } : {}) }}>
               <ambientLight intensity={0.4} color="#334466" />
               <directionalLight position={[5, 3, 5]} intensity={1.2} color="#fff0dd" />
               <directionalLight position={[-4, 2, -5]} intensity={0.5} color="#6680cc" />
               <PlanetDetailMesh data={planet} />
-              {/* Los anillos de Saturno se extienden mucho más allá de la esfera
-                  (hasta 2.4× su radio) — con la distancia/zoom normal de los
-                  demás planetas la cámara quedaba prácticamente adentro del
-                  anillo, por eso se veía tan cerca que no se distinguía nada.
-                  Con anillos: arranca más atrás y se le da más rango de zoom. */}
-              <OrbitControls enableZoom enableDamping dampingFactor={0.08} minDistance={2} maxDistance={planet.rings ? 22 : 8} autoRotate autoRotateSpeed={1.5} />
+              <OrbitControls enableZoom enableDamping dampingFactor={0.08} minDistance={2} maxDistance={maxZoomOut} autoRotate autoRotateSpeed={1.5} />
             </Canvas>
           </div>
 
