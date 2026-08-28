@@ -159,12 +159,7 @@ export const Sun = memo(function Sun() {
   const eruptT   = useRef(0)
   const [erupting, setErupting] = useState(false)
 
-  // Igual que en los planetas: en celular/tablet se usa la versión 2k del Sol
-  // en vez de la 8k — en desktop no cambia nada.
-  const texture = useMemo(
-    () => loadTexture(withBasePath(IS_MOBILE ? '/textures/2k_sun.jpg' : '/textures/8k_sun.jpg')),
-    [],
-  )
+  const texture = useMemo(() => loadTexture(withBasePath('/textures/2k_sun.jpg')), [])
 
   const glowTex = useMemo(() => {
     const c = document.createElement('canvas'); c.width = 128; c.height = 128
@@ -244,13 +239,7 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
   const cloudRef = useRef<THREE.Mesh>(null!)
   const [hovered, setHovered] = useState(false)
 
-  // En celular/tablet, si el planeta trae una versión liviana (`textureUrlMobile`),
-  // se usa esa en vez de la de escritorio — en desktop siempre es `data.textureUrl`,
-  // sin excepción, así que esta rama no lo toca en absoluto.
-  const texture = useMemo(
-    () => loadTexture(IS_MOBILE && data.textureUrlMobile ? data.textureUrlMobile : data.textureUrl),
-    [data.textureUrl, data.textureUrlMobile],
-  )
+  const texture = useMemo(() => loadTexture(data.textureUrl), [data.textureUrl])
   const emissiveColor = useMemo(() => new THREE.Color(data.color), [data.color])
   const mainGeo = useMemo(() => getSharedSphere(data.size, PLANET_SEGMENTS), [data.size])
   // Segmentos del aro/hitbox: en celular se bajan también — son mallas chicas
@@ -700,10 +689,7 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
 
 function PlanetDetailMesh({ data }: { data: PlanetData }) {
   const ref = useRef<THREE.Mesh>(null!)
-  const texture = useMemo(
-    () => loadTexture(IS_MOBILE && data.textureUrlMobile ? data.textureUrlMobile : data.textureUrl),
-    [data.textureUrl, data.textureUrlMobile],
-  )
+  const texture = useMemo(() => loadTexture(data.textureUrl), [data.textureUrl])
   const emissiveColor = useMemo(() => new THREE.Color(data.color), [data.color])
   useFrame(() => { ref.current.rotation.y += 0.004 })
   const scaledSize = Math.min(data.size * 1.8, 2)
