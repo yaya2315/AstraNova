@@ -56,24 +56,27 @@ export default function AnimatedFavicon() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Guarda el ícono original (icon.svg) tal cual estaba en el HTML, para
-    // devolverlo intacto si este componente se desmonta.
+    // Reutiliza el MISMO <link rel="icon"> en vez de crear uno nuevo por
+    // cuadro. La vez pasada pasar a "un nodo nuevo por cuadro" fue lo que
+    // solucionó que se quedara pegado en un solo cuadro — pero esa causa
+    // real era que antes había DOS <link rel="icon"> compitiendo Y además
+    // se usaba requestAnimationFrame (que se pausa solo en segundo plano);
+    // arreglado eso, recrear un nodo del DOM 12 veces por segundo (crear +
+    // insertar + borrar) es trabajo de sobra que no hace falta y que en esta
+    // página —ya bastante cargada de animaciones continuas (fondo aurora en
+    // WebGL, sistema solar 3D, etc.)— se nota como trabas. Con un solo nodo
+    // reutilizado alcanza y cuesta mucho menos.
     const original = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
-    const originalOuterHTML = original?.outerHTML ?? null
-    original?.remove()
+    const originalHref = original?.getAttribute('href') ?? null
+    const originalType = original?.getAttribute('type') ?? null
+    const iconLink: HTMLLinkElement = original ?? document.createElement('link')
+    if (!original) {
+      iconLink.rel = 'icon'
+      document.head.appendChild(iconLink)
+    }
+    iconLink.type = 'image/png'
 
-    // Se sigue creando un <link> nuevo por cuadro (varios Chromium no
-    // repintan el ícono si solo se le cambia el `href` al mismo nodo), pero
-    // ahora con un blob: URL en vez de una data: URI en base64 — codificar
-    // y pegar un string base64 gigante en el DOM en cada cuadro es más
-    // lento que generar un blob binario, así que este cambio también ayuda
-    // a que no se sienta lagueado. Los blob: URLs viejos se liberan
-    // (revokeObjectURL) para no ir acumulando memoria.
-    let currentLink: HTMLLinkElement | null = null
     let currentBlobUrl: string | null = null
-    // toBlob es async — si un cuadro tarda más que el siguiente en resolver,
-    // este contador evita que ese cuadro viejo pise al más nuevo (se vería
-    // como un pequeño "salto atrás" en la órbita).
     let frameId = 0
 
     const t0 = performance.now()
@@ -95,26 +98,21 @@ export default function AnimatedFavicon() {
       canvas.toBlob((blob) => {
         if (!blob || thisFrame !== frameId) return
         const url = URL.createObjectURL(blob)
-        const next = document.createElement('link')
-        next.rel = 'icon'
-        next.type = 'image/png'
-        next.href = url
-        document.head.appendChild(next)
-        currentLink?.remove()
+        iconLink.href = url
         if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl)
-        currentLink = next
         currentBlobUrl = url
       }, 'image/png')
     }
 
     // setInterval en vez de requestAnimationFrame: rAF se pausa por completo
     // en cuanto la pestaña pierde el foco o pasa a segundo plano — acá
-    // interesa que el ícono siga "vivo" incluso sin estar mirándolo.
-    // ~12 cuadros por segundo: con el canvas base pre-dibujado y los blobs
-    // en vez de base64, este ritmo ya no genera el trabado de antes y se ve
-    // notoriamente más fluido que los 10fps originales.
+    // interesa que el ícono siga "vivo" incluso sin estar mirándolo. El
+    // ritmo se bajó a ~5 cuadros por segundo (200ms): para algo tan chico y
+    // que gira tan despacio no hace falta más, y competir menos seguido por
+    // el hilo principal del navegador es lo que de verdad evita las trabas
+    // en una página con tantas animaciones corriendo a la vez.
     draw()
-    const interval = setInterval(draw, 80)
+    const interval = setInterval(draw, 200)
     // Al volver a la pestaña (o si el navegador frenó el intervalo mientras
     // estuvo en segundo plano), fuerza un cuadro fresco de inmediato.
     const onVisible = () => { if (!document.hidden) draw() }
@@ -123,13 +121,12 @@ export default function AnimatedFavicon() {
     return () => {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisible)
-      currentLink?.remove()
       if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl)
-      if (originalOuterHTML) {
-        const wrapper = document.createElement('div')
-        wrapper.innerHTML = originalOuterHTML
-        const restored = wrapper.firstElementChild
-        if (restored) document.head.appendChild(restored)
+      if (originalHref !== null) {
+        iconLink.setAttribute('href', originalHref)
+        if (originalType !== null) iconLink.setAttribute('type', originalType)
+      } else {
+        iconLink.remove()
       }
     }
   }, [])
