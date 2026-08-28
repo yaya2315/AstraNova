@@ -17,9 +17,13 @@ import { useDeepNav } from './DeepNavEngine'
 // planeta, cantidad de estrellas/asteroides, y antialiasing — bajarlos un
 // escalón ahí no se nota a simple vista, pero libera bastante GPU/CPU.
 const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth < 768
-const ORBIT_SEGMENTS = IS_MOBILE ? 40 : 64
-const PLANET_SEGMENTS = IS_MOBILE ? 28 : 48
-const DETAIL_SEGMENTS = IS_MOBILE ? 28 : 48
+// Segunda pasada de optimización mobile — bajados un escalón más de lo que ya
+// estaban (antes 40/28/28): a esta distancia de cámara la diferencia de
+// segmentos no se nota, pero son bastantes menos triángulos por esfera ×
+// 8 planetas + Sol + luna(s) + aros, todos los cuadros.
+const ORBIT_SEGMENTS = IS_MOBILE ? 28 : 64
+const PLANET_SEGMENTS = IS_MOBILE ? 20 : 48
+const DETAIL_SEGMENTS = IS_MOBILE ? 20 : 48
 export const SUN_RADIUS = 2.5
 
 /* ====== SHARED GEOMETRIES ====== */
@@ -299,11 +303,20 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
     if (cloudRef.current) cloudRef.current.rotation.y += 0.011 * speedMul
   })
 
+  // En celular no hay "hover" real (es touch) — igual el raycast de R3F puede
+  // disparar onPointerOver/Out al arrastrar el dedo sobre un planeta, y cada
+  // uno de esos llamaba a onHover/onLeave del padre, re-renderizando TODO
+  // SolarSystem en pleno arrastre. Cortarlo acá es gratis (no se pierde
+  // ningún tooltip que se fuera a mostrar de todos modos en touch) y evita
+  // ese costo justo cuando más se nota: mientras se está girando la cámara.
   const handleOver = useCallback((e: any) => {
-    e.stopPropagation(); setHovered(true); onHover(data); document.body.style.cursor = 'pointer'
+    e.stopPropagation()
+    if (IS_MOBILE) return
+    setHovered(true); onHover(data); document.body.style.cursor = 'pointer'
   }, [data, onHover])
 
   const handleOut = useCallback(() => {
+    if (IS_MOBILE) return
     setHovered(false); onLeave(); document.body.style.cursor = ''
   }, [onLeave])
 
@@ -472,7 +485,7 @@ export const OrbitPaths = memo(function OrbitPaths() {
 })
 
 /* ====== ASTEROID BELT ====== */
-const ASTEROID_COUNT = IS_MOBILE ? 150 : 400
+const ASTEROID_COUNT = IS_MOBILE ? 80 : 400
 export const AsteroidBelt = memo(function AsteroidBelt() {
   const positions = useMemo(() => {
     const p = new Float32Array(ASTEROID_COUNT * 3)
@@ -628,7 +641,7 @@ function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick, flyTarge
     <>
       <ambientLight intensity={0.5} color="#334466" />
       <directionalLight position={[-15, 5, -20]} intensity={0.6} color="#6680cc" />
-      <Stars radius={180} depth={80} count={IS_MOBILE ? 900 : 1800} factor={3} saturation={0} />
+      <Stars radius={180} depth={80} count={IS_MOBILE ? 550 : 1800} factor={3} saturation={0} />
       <Sun />
       {planets.map((p) => (
         <Planet key={p.name} data={p} speedMul={speedMul} onHover={onPlanetHover} onLeave={onPlanetLeave}
@@ -792,7 +805,14 @@ export default function SolarSystem() {
   const handleHover = useCallback((d: PlanetData) => setHovered(d), [])
   const handleLeave = useCallback(() => setHovered(null), [])
 
+  // Este handler existe solo para reposicionar el tooltip de hover (desktop).
+  // En celular el drag para girar la cámara dispara pointermove decenas de
+  // veces por segundo, y `forceTooltip` re-renderiza TODO SolarSystem en cada
+  // una — un tooltip que además nunca se muestra en touch (ver IS_MOBILE en
+  // Planet.handleOver más arriba). Cortado acá, no solo en el JSX de abajo,
+  // para que ni siquiera se programe el re-render.
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (IS_MOBILE) return
     mouseRef.current.x = e.clientX
     mouseRef.current.y = e.clientY
     forceTooltip(c => c + 1)
@@ -864,9 +884,15 @@ export default function SolarSystem() {
           navegador y perder uno de los dos (pantalla negra). Al volver, `flyTarget`
           vive en el padre y sigue intacto, así que la cámara vuelve a enfocar el
           mismo planeta apenas se remonta — no se pierde el lugar donde estabas. */}
+      {/* powerPreference 'high-performance' en celular puede empujar al SoC a
+          buscar el tile de GPU más potente y sostener clocks altos — en
+          sesiones largas eso calienta el chip y el sistema termina bajando
+          la frecuencia (throttling), justo el "se laguea después de un
+          rato" que reportaron. 'low-power' en mobile prioriza consistencia
+          sobre pico de fps, que es lo que realmente se necesita acá. */}
       {!flying && (
-        <Canvas camera={{ position: [0, 30, 55], fov: 50 }} dpr={IS_MOBILE ? [0.6, 1] : [0.75, 1.25]} frameloop={depth === 1 ? 'always' : 'never'}
-          gl={{ antialias: !IS_MOBILE, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2, powerPreference: 'high-performance' }}
+        <Canvas camera={{ position: [0, 30, 55], fov: 50 }} dpr={IS_MOBILE ? [0.5, 0.85] : [0.75, 1.25]} frameloop={depth === 1 ? 'always' : 'never'}
+          gl={{ antialias: !IS_MOBILE, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2, powerPreference: IS_MOBILE ? 'low-power' : 'high-performance' }}
           onPointerMove={handlePointerMove}>
           <Suspense fallback={null}>
             <Scene speedMul={speed} onPlanetHover={handleHover} onPlanetLeave={handleLeave}

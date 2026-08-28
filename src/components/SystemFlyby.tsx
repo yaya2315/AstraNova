@@ -532,8 +532,11 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
       style={{ touchAction: 'none' }}
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onPointerLeave={onUp}
     >
-      <Canvas camera={{ fov: CAMERA_FOV }} dpr={IS_MOBILE ? [0.6, 1] : [1, 1.5]}
-        gl={{ antialias: !IS_MOBILE, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1, powerPreference: 'high-performance' }}>
+      {/* Mismo criterio que el canvas principal de SolarSystem: en celular
+          'low-power' + dpr más bajo evita que el chip sostenga clocks altos
+          y termine con throttling térmico en sesiones de vuelo largas. */}
+      <Canvas camera={{ fov: CAMERA_FOV }} dpr={IS_MOBILE ? [0.5, 0.85] : [1, 1.5]}
+        gl={{ antialias: !IS_MOBILE, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1, powerPreference: IS_MOBILE ? 'low-power' : 'high-performance' }}>
         <SystemScene bodyRefs={bodyRefs} />
         <FlightRig steerRef={steerRef} thrustRef={thrustRef} bodyRefs={bodyRefs}
           keysRef={keysRef} touchAccelRef={touchAccelRef} regresarRef={regresarRef}
