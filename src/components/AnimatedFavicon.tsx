@@ -53,11 +53,9 @@ export default function AnimatedFavicon() {
     iconLink.type = 'image/png'
 
     const t0 = performance.now()
-    let raf = 0
-    let lastDraw = 0
 
-    const draw = (now: number) => {
-      const t = (now - t0) / 1000
+    const draw = () => {
+      const t = (performance.now() - t0) / 1000
       ctx.clearRect(0, 0, SIZE, SIZE)
 
       // Anillos de órbita
@@ -89,16 +87,20 @@ export default function AnimatedFavicon() {
       iconLink.href = canvas.toDataURL('image/png')
     }
 
-    const loop = (now: number) => {
-      // ~10fps alcanza de sobra para verse "vivo" en un ícono de 16-32px y
-      // evita generar un PNG nuevo 60 veces por segundo sin necesidad real.
-      if (now - lastDraw > 100) { draw(now); lastDraw = now }
-      raf = requestAnimationFrame(loop)
-    }
-    raf = requestAnimationFrame(loop)
+    // setInterval en vez de requestAnimationFrame a propósito: rAF se PAUSA
+    // por completo en cuanto la pestaña pierde el foco o pasa a segundo
+    // plano (por diseño del navegador, para ahorrar batería) — por eso el
+    // ícono giraba un poco al cargar y luego se quedaba congelado apenas el
+    // usuario dejaba de mirar esa pestaña. setInterval sigue corriendo en
+    // segundo plano (como mucho el navegador lo espacía un poco más), que es
+    // justo lo que hace falta para que seguir "girando" tenga sentido: un
+    // ícono animado que solo se mueve con la pestaña activa no cumple su
+    // propósito.
+    draw()
+    const interval = setInterval(draw, 100)
 
     return () => {
-      cancelAnimationFrame(raf)
+      clearInterval(interval)
       // Se restaura el ícono estático original (icon.svg) en vez de borrar
       // el <link> — es el mismo elemento que usa el resto del sitio, no uno
       // exclusivo de este componente.
