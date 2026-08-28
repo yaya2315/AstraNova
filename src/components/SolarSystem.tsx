@@ -158,6 +158,15 @@ export const Sun = memo(function Sun() {
   const lightRef = useRef<THREE.PointLight>(null!)
   const eruptT   = useRef(0)
   const [erupting, setErupting] = useState(false)
+  // La textura del Sol (aunque sea la "2k") pesa bastante más que las de los
+  // planetas — el detalle granulado de la superficie comprime peor que una
+  // superficie lisa — así que en una conexión móvil lenta tarda en bajar.
+  // Mientras tanto, sin esto, la esfera se veía negra sólida (el material
+  // queda sin textura hasta que la imagen termina de decodificar) tapando el
+  // resplandor/luz que sí están listos desde el primer cuadro. Se arranca
+  // invisible y recién se muestra cuando la imagen ya cargó — así lo que se
+  // ve mientras tanto es el glow+luz cálidos, nunca un círculo negro.
+  const readyRef = useRef(false)
 
   // El Sol es la única textura que sigue diferenciando por dispositivo: en
   // compu se queda en 8k (nitidez completa), en celular/tablet usa la 2k
@@ -179,6 +188,13 @@ export const Sun = memo(function Sun() {
   }, [])
 
   useFrame((state, delta) => {
+    if (!readyRef.current) {
+      const img = texture.image as HTMLImageElement | undefined
+      if (img && img.complete && img.naturalWidth > 0) {
+        readyRef.current = true
+        ref.current.visible = true
+      }
+    }
     ref.current.rotation.y += 0.002
     const breathe = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.02
 
@@ -205,6 +221,7 @@ export const Sun = memo(function Sun() {
     <group>
       <mesh
         ref={ref}
+        visible={false}
         geometry={getSharedSphere(SUN_RADIUS, PLANET_SEGMENTS)}
         onClick={(e) => { e.stopPropagation(); if (!erupting) { eruptT.current = 0; setErupting(true) } }}
         onPointerOver={() => { document.body.style.cursor = 'crosshair' }}
@@ -790,31 +807,44 @@ export default function SolarSystem() {
   // alta que un % razonable de lo que la pantalla realmente tiene.
   const view = (
     <div ref={containerRef} className={immersive
-      ? 'fixed inset-0 z-[1000] w-screen h-screen bg-space-950 overflow-hidden'
-      : 'relative w-full rounded-2xl overflow-hidden border border-white/[0.04] bg-space-950 h-[min(75vh,440px)] sm:h-[min(78vh,560px)] md:h-[min(80vh,680px)] lg:h-[min(82vh,800px)]'
+      // dvw/dvh (dynamic viewport) en vez de w-screen/h-screen (100vw/100vh):
+      // en el navegador de celular, 100vh no cuenta la barra de direcciones —
+      // cuando está visible, 100vh se pasa del área real y deja un borde sin
+      // cubrir; dvh siempre mide el viewport visible tal cual está en ese
+      // momento, así que cubre borde a borde sin importar si el navegador
+      // muestra o esconde su propia UI.
+      ? 'fixed inset-0 z-[1000] w-[100dvw] h-[100dvh] bg-space-950 overflow-hidden'
+      // Sin esquinas redondeadas ni borde con "aire": el rectángulo llega
+      // limpio de punta a punta.
+      : 'relative w-full overflow-hidden bg-space-950 h-[min(75vh,440px)] sm:h-[min(78vh,560px)] md:h-[min(80vh,680px)] lg:h-[min(82vh,800px)]'
     }>
 
-      {/* Immersive button — top left. Sin etiqueta de texto en pantallas angostas
-          (icono solo) para no chocar con el control de velocidad de la derecha.
-          En lg+ se baja a top-16: el DeepNavHUD (↑ Volver + puntos de profundidad,
-          fixed top-5 en desktop) reclama esa misma franja superior — sin este
-          espacio los dos controles quedaban pegados/pisándose en compu. */}
+      {/* Immersive button — top left. En INMERSIVO (entrar) el texto se
+          esconde en pantallas angostas para no chocar con el control de
+          velocidad; en SALIR (ya adentro) el texto queda siempre visible y
+          con más contraste — es la única forma de volver atrás en pantalla
+          completa, tiene que encontrarse sin dudar. md+/lg+ bajan el control
+          progresivamente: el DeepNavHUD (↑ Volver + puntos de profundidad,
+          fixed arriba en desktop) reclama esa misma franja superior — sin
+          este espacio los dos controles quedaban pegados/pisándose en compu. */}
       <button onClick={toggleImmersive}
-        className="absolute top-4 left-4 lg:top-16 lg:left-6 z-20 flex items-center gap-2 glass rounded-full px-2.5 sm:px-3.5 py-1.5 text-slate-400 hover:text-white transition-colors">
+        className={`absolute top-4 left-4 md:top-12 md:left-5 lg:top-16 lg:left-6 z-20 flex items-center gap-2 glass rounded-full px-2.5 sm:px-3.5 py-1.5 transition-colors ${
+          immersive ? 'text-accent-cyan hover:text-white' : 'text-slate-400 hover:text-white'
+        }`}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
           {immersive
             ? <><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></>
             : <><path d="M3 8V5a2 2 0 0 1 2-2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/></>
           }
         </svg>
-        <span className="hidden sm:inline font-display text-[0.55rem] tracking-[2px] whitespace-nowrap">{immersive ? 'SALIR' : 'INMERSIVO'}</span>
+        <span className={`${immersive ? 'inline' : 'hidden sm:inline'} font-display text-[0.55rem] tracking-[2px] whitespace-nowrap`}>{immersive ? 'SALIR' : 'INMERSIVO'}</span>
       </button>
 
       {/* Speed control — top right. Más compacto en móvil: sin ícono de reloj
           y botones más angostos para no superponerse con el botón inmersivo.
-          Mismo ajuste lg:top-16 que el botón inmersivo, por la misma razón
-          (despejar la franja del DeepNavHUD en desktop). */}
-      <div className="absolute top-4 right-4 lg:top-16 lg:right-6 z-20 flex items-center gap-0.5 sm:gap-1 glass rounded-full px-1.5 sm:px-3 py-1.5">
+          Mismo ajuste progresivo md/lg que el botón inmersivo, por la misma
+          razón (despejar la franja del DeepNavHUD en desktop). */}
+      <div className="absolute top-4 right-4 md:top-12 md:right-5 lg:top-16 lg:right-6 z-20 flex items-center gap-0.5 sm:gap-1 glass rounded-full px-1.5 sm:px-3 py-1.5">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="hidden sm:block text-accent-purple mr-1 flex-shrink-0">
           <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
         </svg>
@@ -886,7 +916,7 @@ export default function SolarSystem() {
           mismo punto en pantalla — el de música (z-900) tapaba a este. */}
       {!flying && (
         <button onClick={() => setFlying(true)}
-          className="absolute bottom-5 left-4 lg:bottom-6 lg:left-6 z-20 flex items-center gap-2 glass rounded-full px-3 sm:px-4 py-2 text-accent-cyan hover:brightness-125 transition-all border border-accent-cyan/20">
+          className="absolute bottom-5 left-4 md:bottom-6 md:left-5 lg:left-6 z-20 flex items-center gap-2 glass rounded-full px-3 sm:px-4 py-2 text-accent-cyan hover:brightness-125 transition-all border border-accent-cyan/20">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
             <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
             <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
@@ -909,5 +939,18 @@ export default function SolarSystem() {
     </div>
   )
 
+  // En modo inmersivo, `view` usa `fixed inset-0` para cubrir toda la pantalla
+  // — pero este componente vive dentro de un `.deep-layer` al que DeepNavEngine
+  // le aplica `transform` (mismo motivo que el tooltip de hover y SystemFlybyView
+  // más abajo, ver comentarios ahí). Un ancestro con `transform` distinto de
+  // `none` pasa a ser el "contenedor" de cualquier hijo `position: fixed`, así
+  // que sin portal el overlay NO cubría la pantalla real: quedaba encogido/mal
+  // alineado dentro de esa capa transformada y terminaba por detrás o pisado
+  // por elementos como el SideNav (que sí vive fuera de esa trampa). Portamos
+  // a document.body SOLO mientras `immersive` está activo — en el modo normal
+  // (tarjeta embebida, no fixed) no hace falta y se renderiza en su lugar.
+  if (immersive && typeof document !== 'undefined') {
+    return createPortal(view, document.body)
+  }
   return view
 }
