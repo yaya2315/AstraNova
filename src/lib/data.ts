@@ -25,6 +25,11 @@ export interface PlanetData {
   moon?: MoonData
   color: string
   textureUrl: string
+  /** Versión liviana opcional de la textura, usada SOLO en celular/tablet
+   *  (ver IS_MOBILE en SolarSystem.tsx) para bajar peso de descarga y costo
+   *  de subida a GPU en equipos de gama media/baja. En desktop siempre se usa
+   *  `textureUrl` sin importar si este campo existe. */
+  textureUrlMobile?: string
   /** Excentricidad orbital real (0 = círculo perfecto). Valores reales de la NASA,
    *  usados en la fórmula polar r(θ) = a(1-e²)/(1+e·cosθ) con el Sol en el foco. */
   eccentricity: number
@@ -63,6 +68,7 @@ export const planets: PlanetData[] = [
     offset: 1.2,
     color: '#E8C080',
     textureUrl: withBasePath('/textures/4k_venus_atmosphere.jpg'),
+    textureUrlMobile: withBasePath('/textures/2k_venus_surface.jpg'),
     eccentricity: 0.007,
     desc: 'El planeta más caliente con atmósfera densa.',
     longDesc: 'Venus es el planeta más caliente del sistema solar. Su densa atmósfera de CO2 atrapa el calor hasta 462°C. Gira en sentido contrario al resto de planetas y un día venusino dura más que su año.',
@@ -108,6 +114,7 @@ export const planets: PlanetData[] = [
     offset: 3.8,
     color: '#D07040',
     textureUrl: withBasePath('/textures/8k_mars.jpg'),
+    textureUrlMobile: withBasePath('/textures/2k_mars.jpg'),
     eccentricity: 0.093,
     desc: 'El planeta rojo. Objetivo de exploración humana.',
     longDesc: 'Marte es conocido como el planeta rojo por el óxido de hierro en su superficie. Posee el volcán más grande del sistema solar, Olympus Mons, y el cañón Valles Marineris. Evidencias sugieren que tuvo agua líquida en el pasado.',
@@ -130,6 +137,7 @@ export const planets: PlanetData[] = [
     offset: 0.8,
     color: '#C88B60',
     textureUrl: withBasePath('/textures/8k_jupiter.jpg'),
+    textureUrlMobile: withBasePath('/textures/2k_jupiter.jpg'),
     eccentricity: 0.048,
     desc: 'El gigante del sistema solar. La Gran Mancha Roja.',
     longDesc: 'Júpiter es el planeta más grande del sistema solar, con masa mayor que todos los demás planetas juntos. Su Gran Mancha Roja es una tormenta activa por más de 350 años. Posee 95 lunas, entre ellas Ganímedes, la luna más grande del sistema solar.',
@@ -154,6 +162,7 @@ export const planets: PlanetData[] = [
     rings: true,
     color: '#F0D8A8',
     textureUrl: withBasePath('/textures/8k_saturn.jpg'),
+    textureUrlMobile: withBasePath('/textures/2k_saturn.jpg'),
     eccentricity: 0.056,
     desc: 'Famoso por sus espectaculares anillos de hielo.',
     longDesc: 'Saturno es reconocido por sus impresionantes anillos de hielo y roca. Es el segundo planeta más grande y tiene una densidad tan baja que flotaría en el agua. Su luna Titán tiene una atmósfera densa y lagos de metano líquido.',

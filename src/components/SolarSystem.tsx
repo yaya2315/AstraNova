@@ -72,8 +72,11 @@ function getCloudTexture(seed: string): THREE.CanvasTexture {
   return tex
 }
 
-/* ====== SOLAR ERUPTION PARTICLES ====== */
-const N_PLASMA = 30
+/* ====== SOLAR ERUPTION PARTICLES ======
+   En celular se reduce la cantidad de partículas: la erupción solo se ve al
+   tocar el Sol, pero durante sus ~2.2s cada partícula recalcula física por
+   cuadro — con menos sprites el mismo golpe visual cuesta bastante menos CPU. */
+const N_PLASMA = IS_MOBILE ? 14 : 30
 
 interface PlasmaP { pos: THREE.Vector3; vel: THREE.Vector3; age: number; life: number }
 
@@ -236,13 +239,22 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
   const cloudRef = useRef<THREE.Mesh>(null!)
   const [hovered, setHovered] = useState(false)
 
-  const texture = useMemo(() => loadTexture(data.textureUrl), [data.textureUrl])
+  // En celular/tablet, si el planeta trae una versión liviana (`textureUrlMobile`),
+  // se usa esa en vez de la de escritorio — en desktop siempre es `data.textureUrl`,
+  // sin excepción, así que esta rama no lo toca en absoluto.
+  const texture = useMemo(
+    () => loadTexture(IS_MOBILE && data.textureUrlMobile ? data.textureUrlMobile : data.textureUrl),
+    [data.textureUrl, data.textureUrlMobile],
+  )
   const emissiveColor = useMemo(() => new THREE.Color(data.color), [data.color])
   const mainGeo = useMemo(() => getSharedSphere(data.size, PLANET_SEGMENTS), [data.size])
-  const rimGeo = useMemo(() => getSharedSphere(data.size, 16), [data.size])
+  // Segmentos del aro/hitbox: en celular se bajan también — son mallas chicas
+  // pero se dibujan 2-3 veces por planeta (aro interior + hitbox invisible),
+  // multiplicado por los 8 planetas suma triángulos innecesarios en GPUs móviles.
+  const rimGeo = useMemo(() => getSharedSphere(data.size, IS_MOBILE ? 10 : 16), [data.size])
   // Hitbox de click más grande que el mesh visible — sin esto, planetas chicos
   // (Mercurio) son casi imposibles de acertar con el mouse/dedo.
-  const hitboxGeo = useMemo(() => getSharedSphere(Math.max(data.size * 1.8, 0.55), 12), [data.size])
+  const hitboxGeo = useMemo(() => getSharedSphere(Math.max(data.size * 1.8, 0.55), IS_MOBILE ? 8 : 12), [data.size])
   // Nubes: solo planetas con atmósfera densa — Mercurio y Marte se quedan sin
   // ellas, y en celular se saltan en todos: es una esfera transparente extra
   // por planeta (alpha blending, caro en fill-rate en GPUs móviles) que se
@@ -354,7 +366,12 @@ function Moon({ moon, speedMul }: { moon: { size: number; orbit: number; speed: 
   const accTime = useRef(0)
 
   const texture = useMemo(() => {
-    const w = 512, h = 256
+    // En celular la textura procedural de la Luna se genera más chica y con
+    // menos cráteres: es costo de un solo golpe al montar (canvas + getImageData/
+    // putImageData sobre cada píxel), pero en un equipo de gama media/baja ese
+    // golpe único ya se nota como una traba al cargar la escena — bajar la
+    // resolución 4x (256×128 vs 512×256) recorta ese trabajo proporcionalmente.
+    const w = IS_MOBILE ? 256 : 512, h = IS_MOBILE ? 128 : 256
     const c = document.createElement('canvas'); c.width = w; c.height = h
     const ctx = c.getContext('2d')!
     // Base highland grey
@@ -372,7 +389,8 @@ function Moon({ moon, speedMul }: { moon: { size: number; orbit: number; speed: 
       ctx.ellipse(mx*w, my*h, rx*w, ry*h, 0, 0, Math.PI*2); ctx.fill()
     }
     // Craters — large
-    for (let i = 0; i < 60; i++) {
+    const craterCount = IS_MOBILE ? 26 : 60
+    for (let i = 0; i < craterCount; i++) {
       const cx = Math.random()*w, cy = Math.random()*h, r = Math.random()*14+3
       ctx.beginPath(); ctx.arc(cx+r*0.1, cy+r*0.1, r*1.08, 0, Math.PI*2)
       ctx.fillStyle = 'rgba(50,48,46,0.4)'; ctx.fill()
@@ -637,8 +655,11 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
 
         <div className="flex flex-col lg:flex-row gap-8 items-start">
           <div className="w-full lg:w-[320px] aspect-square rounded-2xl overflow-hidden flex-shrink-0 bg-space-900/50 border border-white/5">
-            <Canvas camera={{ position: [0, 0, 4], fov: 45 }} dpr={[0.75, 1.25]}
-              gl={{ antialias: false, alpha: true, toneMapping: THREE.ACESFilmicToneMapping }}>
+            {/* Este panel abre un SEGUNDO contexto WebGL encima del de la escena
+                principal — en celular se le baja el dpr y se fuerza low-power
+                para que abrir la ficha de un planeta no se sienta trabado. */}
+            <Canvas camera={{ position: [0, 0, 4], fov: 45 }} dpr={IS_MOBILE ? [0.55, 0.9] : [0.75, 1.25]}
+              gl={{ antialias: false, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, ...(IS_MOBILE ? { powerPreference: 'low-power' as const } : {}) }}>
               <ambientLight intensity={0.4} color="#334466" />
               <directionalLight position={[5, 3, 5]} intensity={1.2} color="#fff0dd" />
               <directionalLight position={[-4, 2, -5]} intensity={0.5} color="#6680cc" />
@@ -674,7 +695,10 @@ function PlanetDetailPanel({ planet, onClose, onPrev, onNext }: {
 
 function PlanetDetailMesh({ data }: { data: PlanetData }) {
   const ref = useRef<THREE.Mesh>(null!)
-  const texture = useMemo(() => loadTexture(data.textureUrl), [data.textureUrl])
+  const texture = useMemo(
+    () => loadTexture(IS_MOBILE && data.textureUrlMobile ? data.textureUrlMobile : data.textureUrl),
+    [data.textureUrl, data.textureUrlMobile],
+  )
   const emissiveColor = useMemo(() => new THREE.Color(data.color), [data.color])
   useFrame(() => { ref.current.rotation.y += 0.004 })
   const scaledSize = Math.min(data.size * 1.8, 2)
@@ -685,11 +709,11 @@ function PlanetDetailMesh({ data }: { data: PlanetData }) {
         <meshStandardMaterial map={texture} roughness={0.6} metalness={0.05} emissive={emissiveColor} emissiveIntensity={0.1} />
       </mesh>
       {/* Inner rim */}
-      <mesh geometry={getSharedSphere(scaledSize, 16)} scale={1.1}>
+      <mesh geometry={getSharedSphere(scaledSize, IS_MOBILE ? 10 : 16)} scale={1.1}>
         <meshBasicMaterial color={data.color} transparent opacity={0.2} side={THREE.BackSide} />
       </mesh>
       {/* Outer glow */}
-      <mesh geometry={getSharedSphere(scaledSize, 16)} scale={1.28}>
+      <mesh geometry={getSharedSphere(scaledSize, IS_MOBILE ? 10 : 16)} scale={1.28}>
         <meshBasicMaterial color={data.color} transparent opacity={0.07} side={THREE.BackSide} />
       </mesh>
       {data.rings && <SaturnRings size={scaledSize} />}
