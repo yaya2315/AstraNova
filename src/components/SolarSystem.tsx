@@ -465,33 +465,10 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
           <meshBasicMaterial color={data.color} transparent opacity={hovered ? 0.12 : 0.05} side={THREE.BackSide} />
         </mesh>
       )}
-      {/* En compu la etiqueta queda siempre visible (antes solo aparecía al
-          pasar el mouse, y a la distancia de cámara normal el texto quedaba
-          casi ilegible) — con el nombre más grande y el tipo de planeta
-          debajo, como en las tarjetas de detalle. En celular no hay "hover"
-          real (ver handleOver/handleOut arriba), así que ahí se mantiene
-          exactamente el comportamiento de antes: sin costo extra. */}
-      {(!IS_MOBILE || hovered) && (
+      {hovered && (
         <Html distanceFactor={15} center style={{ pointerEvents: 'none' }}>
-          <div className="flex flex-col items-center gap-1 transition-opacity duration-300" style={{ opacity: hovered ? 1 : 0.85 }}>
-            <div
-              className="px-4 py-1.5 rounded-full glass-strong font-display font-bold whitespace-nowrap border transition-all duration-300"
-              style={{
-                fontSize: hovered ? '0.82rem' : '0.7rem',
-                letterSpacing: '2.5px',
-                color: hovered ? '#22D3EE' : 'rgba(224,242,254,0.88)',
-                borderColor: hovered ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.12)',
-                boxShadow: hovered ? '0 0 18px rgba(34,211,238,0.28)' : 'none',
-              }}
-            >
-              {data.name.toUpperCase()}
-            </div>
-            <div
-              className="font-display whitespace-nowrap"
-              style={{ fontSize: '0.46rem', letterSpacing: '2px', color: 'rgba(148,163,184,0.75)' }}
-            >
-              {data.type}
-            </div>
+          <div className="px-4 py-1.5 rounded-full glass-strong text-accent-cyan text-[0.6rem] font-display tracking-[3px] whitespace-nowrap shadow-lg shadow-accent-purple/10 border border-accent-purple/20">
+            {data.name.toUpperCase()}
           </div>
         </Html>
       )}
@@ -1060,11 +1037,20 @@ export default function SolarSystem() {
               typeof window !== 'undefined' ? window.innerHeight - 220 : 9999,
             ),
           }}>
-          <div className="glass-strong rounded-2xl p-5 max-w-[280px] shadow-2xl border border-accent-purple/10">
-            <h4 className="font-display text-sm tracking-[2px] mb-1" style={{ color: hovered.color }}>{hovered.name}</h4>
-            <div className="font-display text-[0.55rem] tracking-[3px] text-slate-500 mb-2">{hovered.type}</div>
-            <p className="text-sm text-slate-400 leading-relaxed mb-3">{hovered.desc}</p>
-            <div className="text-[0.55rem] text-accent-purple font-display tracking-widest">CLICK PARA EXPLORAR</div>
+          {/* En modo inmersivo esta tarjeta se achica a solo nombre + tipo —
+              una "pestaña" de referencia rápida en vez de la ficha completa,
+              que se siente pesada mientras se está volando/explorando la
+              escena. Fuera de inmersivo se mantiene la tarjeta completa de
+              siempre (con descripción y el CTA de click). */}
+          <div className={`glass-strong rounded-2xl shadow-2xl border border-accent-purple/10 ${immersive ? 'px-4 py-2.5' : 'p-5 max-w-[280px]'}`}>
+            <h4 className={`font-display tracking-[2px] ${immersive ? 'text-[0.8rem] mb-0.5' : 'text-sm mb-1'}`} style={{ color: hovered.color }}>{hovered.name}</h4>
+            <div className={`font-display tracking-[3px] text-slate-500 ${immersive ? 'text-[0.5rem]' : 'text-[0.55rem] mb-2'}`}>{hovered.type}</div>
+            {!immersive && (
+              <>
+                <p className="text-sm text-slate-400 leading-relaxed mb-3">{hovered.desc}</p>
+                <div className="text-[0.55rem] text-accent-purple font-display tracking-widest">CLICK PARA EXPLORAR</div>
+              </>
+            )}
           </div>
         </div>,
         document.body,
