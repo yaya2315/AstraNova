@@ -213,7 +213,10 @@ export default function AuroraBg({ pauseOnMobile = false }: { pauseOnMobile?: bo
     const DPR_CAP = 1.25
     const resize = () => {
       const dpr   = Math.min(window.devicePixelRatio || 1, DPR_CAP)
-      const scale = window.innerWidth < 768 ? 0.75 : 1.0  // halve resolution on mobile
+      // En celular se renderiza a menor resolución interna (el CSS la estira
+      // igual a pantalla completa) — el shader tiene varias octavas de ruido
+      // por píxel, así que menos píxeles reales = costo mucho menor por cuadro.
+      const scale = window.innerWidth < 768 ? 0.55 : 1.0
       const w     = Math.round(window.innerWidth  * dpr * scale)
       const h     = Math.round(window.innerHeight * dpr * scale)
       canvas.width  = w
@@ -225,17 +228,27 @@ export default function AuroraBg({ pauseOnMobile = false }: { pauseOnMobile?: bo
     window.addEventListener('resize', resize, { passive: true })
 
     // ── Render loop ───────────────────────────────────────────────────────
-    let raf     = 0
-    let active  = true   // set false by IntersectionObserver when off-screen
-    let visible = true   // set false by visibilitychange when tab hidden
-    const t0    = performance.now()
+    let raf        = 0
+    let active     = true   // set false by IntersectionObserver when off-screen
+    let visible    = true   // set false by visibilitychange when tab hidden
+    let frameCount = 0
+    const t0       = performance.now()
 
     const frame = (now: number) => {
       // En celular, mientras el Sistema Solar 3D (otro contexto WebGL aparte
       // de este) está al frente, esta aurora de fondo queda casi tapada de
       // todos modos — pausarla ahí libera GPU para lo que sí se ve.
-      const pausedForHeavyLayer = pauseRef.current && window.innerWidth < 768
-      if (active && visible && !pausedForHeavyLayer) {
+      const isMobile          = window.innerWidth < 768
+      const pausedForHeavyLayer = pauseRef.current && isMobile
+      // Fuera de esa capa (Inicio, Historia, Constelaciones, Galería,
+      // Misiones), este shader seguía corriendo a 60fps sin límite en
+      // celular — es un fondo decorativo fijo detrás de TODO el sitio, así
+      // que competía por GPU con cualquier otra animación en pantalla
+      // (incluido el logo del Sistema Solar en el menú). Se limita a ~30fps
+      // ahí saltando un cuadro de cada dos.
+      frameCount++
+      const skippedForFramerate = isMobile && frameCount % 2 !== 0
+      if (active && visible && !pausedForHeavyLayer && !skippedForFramerate) {
         gl.uniform1f(uTime, (now - t0) * 0.001)
         gl.drawArrays(gl.TRIANGLES, 0, 3)
       }

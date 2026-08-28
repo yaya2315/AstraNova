@@ -9,6 +9,11 @@ import { abrirMisionDelMotor } from '@/lib/motorMisionesBridge'
 
 // ─── Animation ───────────────────────────────────────────────────────────────
 
+// Mismo patrón que en SolarSystem.tsx/SystemFlyby.tsx: se calcula una sola vez
+// al cargar el módulo, para bajar densidad de estrellas y limitar el framerate
+// de los canvas 2D (Constelaciones) en celular sin tocar desktop.
+const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth < 768
+
 const EASE = [0.22, 1, 0.36, 1] as const
 
 // Fade + blur up — bidirectional (animates out when leaving viewport)
@@ -565,12 +570,26 @@ export function ConstellationsSection() {
     setOffset(next); offsetRef.current = next
   }
 
+  const frameSkipRef = useRef(0)
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current; if (!canvas) return
     if (!mapVisibleRef.current) { animRef.current = 0; return }
+    // En celular este canvas redibuja 1100+ estrellas y varios degradados por
+    // cuadro a 60fps sobre un lienzo virtual de 3600x2000 — costoso en GPUs
+    // móviles. Se limita a ~30fps ahí saltando un cuadro de cada dos; el
+    // parpadeo de las estrellas sigue viéndose fluido porque su velocidad
+    // (timeRef) no depende del framerate real.
+    if (IS_MOBILE) {
+      frameSkipRef.current++
+      if (frameSkipRef.current % 2 !== 0) {
+        animRef.current = requestAnimationFrame(draw)
+        return
+      }
+    }
     const ctx = canvas.getContext('2d')!
     const W = VIRT_W, H = VIRT_H
-    timeRef.current += 0.008
+    timeRef.current += IS_MOBILE ? 0.016 : 0.008
     ctx.clearRect(0, 0, W, H)
 
     bgStars.current.forEach(s => {
@@ -621,7 +640,7 @@ export function ConstellationsSection() {
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return
     canvas.width=VIRT_W; canvas.height=VIRT_H
-    bgStars.current = Array.from({length:1100},()=>({
+    bgStars.current = Array.from({length:IS_MOBILE ? 380 : 1100},()=>({
       x:Math.random()*VIRT_W, y:Math.random()*VIRT_H,
       r:Math.random()*1.3+0.3, o:Math.random()*0.5+0.1, tw:Math.random()*2+0.5
     }))
@@ -896,16 +915,24 @@ function ConstellationZoomView({ constellation, height=320, width=880 }: { const
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return
     const W=width, H=height; canvas.width=W; canvas.height=H
-    const bgStars = Array.from({length:100},()=>({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.1+0.3,o:Math.random()*0.4+0.1,tw:Math.random()*2+0.5}))
+    const bgStars = Array.from({length:IS_MOBILE ? 45 : 100},()=>({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.1+0.3,o:Math.random()*0.4+0.1,tw:Math.random()*2+0.5}))
     const xs=constellation.stars.map(s=>s[0]),ys=constellation.stars.map(s=>s[1])
     const cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2
     const span=Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys),0.05)*2.2
     const pad=38
     const toX=(v:number)=>pad+((v-cx)/span+0.5)*(W-2*pad)
     const toY=(v:number)=>pad+((v-cy)/span+0.5)*(H-2*pad)
+    let skip=0
 
     const draw=()=>{
-      timeRef.current+=0.012
+      // Igual que el mapa principal: en celular se dibuja a ~30fps en vez de
+      // 60fps, ya que cada cuadro crea varios degradados (gradients), algo
+      // caro para el GPU/CPU de un teléfono.
+      if (IS_MOBILE) {
+        skip++
+        if (skip % 2 !== 0) { animRef.current=requestAnimationFrame(draw); return }
+      }
+      timeRef.current+=IS_MOBILE ? 0.024 : 0.012
       const ctx=canvas.getContext('2d')!
       ctx.clearRect(0,0,W,H)
       bgStars.forEach(s=>{
