@@ -159,7 +159,13 @@ export const Sun = memo(function Sun() {
   const eruptT   = useRef(0)
   const [erupting, setErupting] = useState(false)
 
-  const texture = useMemo(() => loadTexture(withBasePath('/textures/2k_sun.jpg')), [])
+  // El Sol es la única textura que sigue diferenciando por dispositivo: en
+  // compu se queda en 8k (nitidez completa), en celular/tablet usa la 2k
+  // liviana para no pesar la carga inicial.
+  const texture = useMemo(
+    () => loadTexture(withBasePath(IS_MOBILE ? '/textures/2k_sun.jpg' : '/textures/8k_sun.jpg')),
+    [],
+  )
 
   const glowTex = useMemo(() => {
     const c = document.createElement('canvas'); c.width = 128; c.height = 128
@@ -334,7 +340,7 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
 /* ====== SATURN RINGS ====== */
 export const SaturnRings = memo(function SaturnRings({ size }: { size: number }) {
   const innerR = size * 1.3, outerR = size * 2.4
-  const ringTex = useMemo(() => loadTexture(withBasePath('/textures/8k_saturn_ring_alpha.jpg')), [])
+  const ringTex = useMemo(() => loadTexture(withBasePath('/textures/2k_saturn_ring_alpha.png')), [])
 
   const geo = useMemo(() => {
     const g = new THREE.RingGeometry(innerR, outerR, 48)
