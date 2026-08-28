@@ -263,6 +263,16 @@ body {
   50%       { transform: translateY(-7px); }
 }
 
+/* Choque de la nave en "Pilotear Nave" (SystemFlyby.tsx) — destello rápido
+   que se prende de golpe y se apaga solo, sincronizado con los ~1.8s que
+   dura la nave congelada antes de reaparecer. */
+@keyframes flashColision {
+  0%   { opacity: 0; }
+  6%   { opacity: 1; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════
    DEEP NAVIGATION ENGINE — mazo de capas apiladas en 3D
    El transform/opacity/filter de cada capa ahora los anima DeepNavEngine.tsx

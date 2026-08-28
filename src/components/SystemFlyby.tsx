@@ -27,6 +27,7 @@ const START_DISTANCE = 95     // más allá de Neptuno (orbit≈48), vista de co
 const MAX_DISTANCE = 95       // contención: no alejarse más allá del borde del sistema
 const AUTOPILOT_TURN = 1.5    // rad/s de corrección al pasarse del límite exterior
 const COLLISION_BUFFER = 1.5  // margen extra sobre el radio real de cada cuerpo
+const COLISION_DURACION = 1.8 // segundos que dura la secuencia de choque antes de reaparecer
 const CAMERA_FOV = 50         // lente más cerrado — menos "ojo de pez", da sensación de mayor escala
 
 // Manejo por teclado — W/↑ acelera, S/↓ frena (o da reversa), A/D o ←/→
@@ -288,7 +289,7 @@ function Cockpit({ keysRef }: { keysRef: React.RefObject<Set<string>> }) {
    planeta sea ni dónde esté en su órbita en ese instante.
    Contención exterior: más allá de MAX_DISTANCE un "autopiloto" gira suavemente de
    vuelta hacia el centro del sistema en vez de dejar volar a la nave para siempre. */
-function FlightRig({ steerRef, thrustRef, bodyRefs, keysRef, touchAccelRef, regresarRef, onBoundsChange, onNearestChange }: {
+function FlightRig({ steerRef, thrustRef, bodyRefs, keysRef, touchAccelRef, regresarRef, onBoundsChange, onNearestChange, onColision }: {
   steerRef: React.RefObject<{ x: number; y: number }>
   thrustRef: React.RefObject<number>
   bodyRefs: React.RefObject<Map<string, BodyEntry>>
@@ -297,12 +298,16 @@ function FlightRig({ steerRef, thrustRef, bodyRefs, keysRef, touchAccelRef, regr
   regresarRef: React.RefObject<boolean>
   onBoundsChange: (out: boolean) => void
   onNearestChange: (label: string | null) => void
+  onColision: (tipo: 'planeta' | 'sol' | null) => void
 }) {
   const { camera } = useThree()
   const yaw = useRef(0)
   const pitch = useRef(0)
   const wasOut = useRef(false)
   const lastNearestLabel = useRef<string | null>(null)
+  const colisionActiva = useRef(false)
+  const colisionTimer = useRef(0)
+  const colisionPos = useRef(new THREE.Vector3())
 
   const posicionInicial = useCallback(() => {
     camera.position.set(0, 24, START_DISTANCE)
@@ -349,6 +354,28 @@ function FlightRig({ steerRef, thrustRef, bodyRefs, keysRef, touchAccelRef, regr
       posicionInicial()
       thrustRef.current = 0
       if (wasOut.current) { wasOut.current = false; onBoundsChange(false) }
+      return
+    }
+
+    // Secuencia de "choque": la nave queda congelada en el punto de impacto
+    // (con una sacudida chiquita que decae) mientras la pantalla hace el
+    // resto del efecto — nada de física de explosión real, solo unos
+    // segundos de espera antes de reaparecer en el punto de entrada.
+    if (colisionActiva.current) {
+      colisionTimer.current += delta
+      const restante = COLISION_DURACION - colisionTimer.current
+      if (restante > 0) {
+        const intensidad = Math.min(0.4, restante) * 0.1
+        camera.position.copy(colisionPos.current)
+        camera.position.x += (Math.random() - 0.5) * intensidad
+        camera.position.y += (Math.random() - 0.5) * intensidad
+        camera.position.z += (Math.random() - 0.5) * intensidad
+      } else {
+        colisionActiva.current = false
+        posicionInicial()
+        thrustRef.current = 0
+        onColision(null)
+      }
       return
     }
 
@@ -416,9 +443,16 @@ function FlightRig({ steerRef, thrustRef, bodyRefs, keysRef, touchAccelRef, regr
 
       const minD = entry.radius + COLLISION_BUFFER
       if (nearestDist < minD) {
-        const dir = camera.position.clone().sub(entry.obj.position)
-        dir.setLength(minD)
-        camera.position.copy(entry.obj.position).add(dir)
+        // Choque real: se congela acá (nada de atravesar ni rebotar) y
+        // arranca la secuencia de destrucción — el Sol "derrite" la nave,
+        // cualquier otro cuerpo la hace explotar.
+        colisionActiva.current = true
+        colisionTimer.current = 0
+        colisionPos.current.copy(camera.position)
+        thrustRef.current = 0
+        lastNearestLabel.current = null
+        onNearestChange(null)
+        onColision(nearestName === '__sun__' ? 'sol' : 'planeta')
       }
     }
   })
@@ -471,6 +505,7 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
   const regresarRef = useRef(false)
   const [outOfBounds, setOutOfBounds] = useState(false)
   const [nearest, setNearest] = useState<string | null>(null)
+  const [colision, setColision] = useState<'planeta' | 'sol' | null>(null)
 
   // La capa activa de DeepNavEngine aplica `transform`, lo que convierte a un
   // `position: fixed` descendiente en algo "fijo respecto a esa capa" en vez de
@@ -502,7 +537,7 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
         <SystemScene bodyRefs={bodyRefs} />
         <FlightRig steerRef={steerRef} thrustRef={thrustRef} bodyRefs={bodyRefs}
           keysRef={keysRef} touchAccelRef={touchAccelRef} regresarRef={regresarRef}
-          onBoundsChange={setOutOfBounds} onNearestChange={setNearest} />
+          onBoundsChange={setOutOfBounds} onNearestChange={setNearest} onColision={setColision} />
         <Cockpit keysRef={keysRef} />
       </Canvas>
 
@@ -511,6 +546,30 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
         <div className="absolute inset-0 rounded-full border border-white/30" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/70" />
       </div>
+
+      {colision && (
+        <>
+          <div
+            className="absolute inset-0 z-40 pointer-events-none animate-[flashColision_1.8s_ease-out]"
+            style={{
+              background: colision === 'sol'
+                ? 'radial-gradient(circle, rgba(255,244,214,.95), rgba(255,150,40,.45) 55%, transparent 78%)'
+                : 'radial-gradient(circle, rgba(255,255,255,.92), rgba(255,110,60,.4) 55%, transparent 78%)',
+            }}
+          />
+          <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none animate-[flashColision_1.8s_ease-out]">
+            <div className="text-center">
+              <p className="font-display text-[0.55rem] tracking-[3px] text-white/80 mb-2">
+                {colision === 'sol' ? 'TEMPERATURA CRÍTICA' : 'COLISIÓN DETECTADA'}
+              </p>
+              <p className="font-display text-xl sm:text-2xl tracking-[3px] text-white font-bold"
+                style={{ textShadow: '0 0 26px rgba(255,150,60,.85)' }}>
+                {colision === 'sol' ? 'NAVE DESINTEGRADA' : 'NAVE DESTRUIDA'}
+              </p>
+            </div>
+          </div>
+        </>
+      )}
 
       {outOfBounds && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 glass-strong rounded-full pl-4 pr-2 py-2 flex items-center gap-3">

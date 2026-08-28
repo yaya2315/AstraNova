@@ -21,7 +21,6 @@ import { estaSilenciado, establecerSilencio } from './nucleo/audio-mision.js'
 
 const CLAVE_ESTRELLAS = 'astra-mision-estrellas'
 const CLAVE_DIFICULTAD = 'astra-mision-dificultad'
-const CLAVE_ACCESIBLE = 'astra-mision-accesible'
 const CLAVE_SILENCIO = 'astra-mision-silencio'
 const CLAVE_NIVELES = 'astra-mision-niveles'
 
@@ -84,13 +83,6 @@ export function obtenerDificultadPreferida() {
 function guardarDificultadPreferida(valor) {
   guardarJSON(CLAVE_DIFICULTAD, valor)
 }
-export function obtenerModoAccesiblePreferido() {
-  return leerJSON(CLAVE_ACCESIBLE, false)
-}
-function guardarModoAccesiblePreferido(valor) {
-  guardarJSON(CLAVE_ACCESIBLE, valor)
-}
-
 // ── Progreso por nivel (N1/N2/N3) ────────────────────────────────────────
 // Cada misión arranca con N1 desbloqueado y N2/N3 bloqueados. Superar un
 // nivel (terminar sus 5 etapas) lo marca como completado y desbloquea el
@@ -178,11 +170,6 @@ function crearEsqueletoModal(id) {
             <button type="button" data-dificultad="2">N2<span class="mision-nivel-insignia" aria-hidden="true"></span></button>
             <button type="button" data-dificultad="3">N3<span class="mision-nivel-insignia" aria-hidden="true"></span></button>
           </div>
-          <label class="mision-toggle-accesible">
-            <input type="checkbox" data-accion="accesible" class="mision-toggle-input" />
-            <span class="mision-toggle-pista" aria-hidden="true"></span>
-            <span class="mision-toggle-texto">Modo accesible</span>
-          </label>
           <div class="mision-grupo-iconos">
             <button type="button" class="mision-boton-icono" data-accion="silencio" aria-pressed="false" aria-label="Silenciar sonido">${ICONO_SONIDO}</button>
             <button type="button" class="mision-cerrar" aria-label="Cerrar misión">${ICONO_CERRAR}</button>
@@ -239,7 +226,10 @@ export async function abrirMision(id, opciones = {}) {
   // progreso de ESTA misión en particular: si todavía no superó N1 acá,
   // arranca en N1 aunque la preferencia global sea N2 o N3.
   let dificultad = Math.min(opciones.dificultad ?? obtenerDificultadPreferida(), progresoMision.maxDesbloqueado)
-  let modoAccesible = opciones.modoAccesible ?? obtenerModoAccesiblePreferido()
+  // El modo accesible no tiene control visible en la interfaz — queda
+  // siempre apagado (los juegos igual soportan la opción por si se vuelve
+  // a activar más adelante).
+  const modoAccesible = false
   establecerSilencio(leerJSON(CLAVE_SILENCIO, false))
 
   const nodoBriefing = fondo.querySelector('[data-fase="briefing"]')
@@ -248,7 +238,6 @@ export async function abrirMision(id, opciones = {}) {
   const contenedorJuego = fondo.querySelector('.mision-contenedor-juego')
   const botonSilencio = fondo.querySelector('[data-accion="silencio"]')
   const botonesDificultad = [...fondo.querySelectorAll('[data-dificultad]')]
-  const checkboxAccesible = fondo.querySelector('[data-accion="accesible"]')
 
   function reflejarControles() {
     botonesDificultad.forEach((b) => {
@@ -270,7 +259,6 @@ export async function abrirMision(id, opciones = {}) {
       const insignia = b.querySelector('.mision-nivel-insignia')
       if (insignia) insignia.innerHTML = !desbloqueado ? ICONO_CANDADO : completado ? ICONO_CHECK : ''
     })
-    checkboxAccesible.checked = modoAccesible
     botonSilencio.setAttribute('aria-pressed', String(estaSilenciado()))
     botonSilencio.innerHTML = estaSilenciado() ? ICONO_SONIDO_MUDO : ICONO_SONIDO
   }
@@ -284,10 +272,6 @@ export async function abrirMision(id, opciones = {}) {
       guardarDificultadPreferida(dificultad)
       reflejarControles()
     })
-  })
-  checkboxAccesible.addEventListener('change', () => {
-    modoAccesible = checkboxAccesible.checked
-    guardarModoAccesiblePreferido(modoAccesible)
   })
   botonSilencio.addEventListener('click', () => {
     establecerSilencio(!estaSilenciado())
