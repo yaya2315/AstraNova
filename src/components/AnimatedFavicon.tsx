@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 
 // Favicon animado — mismo diseño y colores que MiniSolarSystem.tsx (el logo
 // del menú): Sol al centro, dos anillos de órbita y tres planetas girando.
@@ -36,13 +36,21 @@ export default function AnimatedFavicon() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Se agrega un <link> propio en vez de tocar el que puso Next.js para
-    // icon.svg — así ese sigue intacto como respaldo, y el navegador
-    // prioriza este (el último rel="icon" en el <head>) apenas monta.
-    const link = document.createElement('link')
-    link.rel = 'icon'
-    link.type = 'image/png'
-    document.head.appendChild(link)
+    // Reutiliza el MISMO <link rel="icon"> que Next.js ya puso en el <head>
+    // para icon.svg, en vez de agregar uno nuevo al lado — con dos links de
+    // ícono compitiendo, la mayoría de los navegadores se quedan mostrando
+    // el primero para siempre y nunca notan los cambios en el segundo (por
+    // eso se veía estático). Sobreescribiendo el href del mismo elemento,
+    // el navegador sí lo redibuja cada vez.
+    const existing = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
+    const originalHref = existing?.getAttribute('href') ?? null
+    const originalType = existing?.getAttribute('type') ?? null
+    const iconLink: HTMLLinkElement = existing ?? document.createElement('link')
+    if (!existing) {
+      iconLink.rel = 'icon'
+      document.head.appendChild(iconLink)
+    }
+    iconLink.type = 'image/png'
 
     const t0 = performance.now()
     let raf = 0
@@ -78,7 +86,7 @@ export default function AnimatedFavicon() {
         ctx.fill()
       }
 
-      link.href = canvas.toDataURL('image/png')
+      iconLink.href = canvas.toDataURL('image/png')
     }
 
     const loop = (now: number) => {
@@ -91,7 +99,15 @@ export default function AnimatedFavicon() {
 
     return () => {
       cancelAnimationFrame(raf)
-      link.remove()
+      // Se restaura el ícono estático original (icon.svg) en vez de borrar
+      // el <link> — es el mismo elemento que usa el resto del sitio, no uno
+      // exclusivo de este componente.
+      if (originalHref !== null) {
+        iconLink.setAttribute('href', originalHref)
+        if (originalType !== null) iconLink.setAttribute('type', originalType)
+      } else {
+        iconLink.remove()
+      }
     }
   }, [])
 
