@@ -163,18 +163,22 @@ function TopNav() {
 }
 
 // ── HUD de profundidad ────────────────────────────────────────────────────────
-// Indicador fijo: puntos de profundidad + botón ↑ Volver.
+// Indicador fijo: puntos de profundidad. Antes también tenía el botón
+// "↑ Volver" — se sacó a pedido explícito (aparecía en todas las páginas y
+// todos los dispositivos, y no se quería ahí). `surface()` sigue existiendo
+// y sigue andando por teclado (Escape / Backspace, definido en
+// DeepNavEngine.tsx); esto solo quita el botón visual, no la función.
 // Solo aparece cuando depth > 0 (invisible en la superficie).
 // Z-index 500: sobre las capas (z-10) pero bajo SideNav (z-999).
 function DeepNavHUD() {
-  const { depth, surface } = useDeepNav()
+  const { depth } = useDeepNav()
 
   return (
     <div
       className="fixed top-[62px] right-4 lg:top-5 lg:right-5 z-[500] flex items-center gap-3"
       style={{
         opacity:       depth > 0 ? 1 : 0,
-        pointerEvents: depth > 0 ? 'auto' : 'none',
+        pointerEvents: 'none',
         transition:    'opacity 0.3s ease',
       }}
     >
@@ -196,36 +200,6 @@ function DeepNavHUD() {
           />
         ))}
       </div>
-
-      {/* Botón ↑ Volver — subtil, se activa con hover */}
-      <button
-        onClick={surface}
-        aria-label="Volver (Escape / Backspace)"
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all duration-300"
-        style={{
-          fontFamily:     'inherit',
-          fontSize:       '0.52rem',
-          letterSpacing:  '0.18em',
-          textTransform:  'uppercase',
-          color:          'rgba(0,240,255,0.45)',
-          border:         '1px solid rgba(0,240,255,0.15)',
-          background:     'rgba(0,0,0,0.55)',
-          backdropFilter: 'blur(12px)',
-          cursor:         'pointer',
-        }}
-        onMouseEnter={e => {
-          const el = e.currentTarget as HTMLElement
-          el.style.color = 'rgba(0,240,255,0.9)'
-          el.style.borderColor = 'rgba(0,240,255,0.40)'
-        }}
-        onMouseLeave={e => {
-          const el = e.currentTarget as HTMLElement
-          el.style.color = 'rgba(0,240,255,0.45)'
-          el.style.borderColor = 'rgba(0,240,255,0.15)'
-        }}
-      >
-        ↑ Volver
-      </button>
     </div>
   )
 }
