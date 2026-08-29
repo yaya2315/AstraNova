@@ -1003,9 +1003,20 @@ function ConstellationZoomView({ constellation, height=320, width=880 }: { const
    CONSTELLATION TRACE GAME — "conectar los puntos"
 
    Se muestran las estrellas reales de la constelación SIN sus líneas. El
-   usuario toca (o hace click en) dos estrellas para trazar la línea entre
-   ellas — funciona igual con dedo que con mouse porque usa onClick, que el
-   navegador dispara para ambos sin lógica separada de touch/drag.
+   usuario apreta/toca una estrella y ARRASTRA — sale una línea que sigue
+   al dedo/mouse en vivo. Al soltar: si cae sobre la estrella correcta, la
+   línea se fija; si no cae sobre ninguna estrella (o la sueltan afuera de
+   la ventana flotante), la línea se retrae animada de vuelta al punto de
+   origen en vez de quedar tirada o desaparecer de golpe.
+
+   Se implementa con Pointer Events (funciona igual con mouse, touch y
+   stylus) + setPointerCapture: al capturar el puntero sobre la estrella de
+   origen, los eventos de mover/soltar siguen llegando a ese mismo elemento
+   pase lo que pase con el dedo/cursor — incluso si sale del SVG — que es
+   justo lo que hace falta para poder soltar "afuera" y detectarlo. Para
+   convertir la posición de la pantalla a coordenadas del SVG (que puede
+   estar escalado por el viewBox) se usa getScreenCTM(), el método nativo
+   correcto para eso en vez de cuentas manuales con el bounding box.
 
    Regla de "no cruzar líneas a menos que la figura real lo requiera": en vez
    de detectar cruces geométricos en vivo (frágil y confuso para el usuario:
@@ -1014,14 +1025,14 @@ function ConstellationZoomView({ constellation, height=320, width=880 }: { const
    REALES de la constelación, dos líneas de esa lista solo se cruzan en
    pantalla si la figura verdadera se cruza a sí misma ahí — por eso
    aceptar únicamente pares que estén en `lines` ya implementa la regla
-   pedida sin necesitar geometría aparte: un cruce entre dos líneas
-   aceptadas es, por definición, un cruce que la constelación real tiene, y
-   cualquier línea que el usuario intente que NO sea parte de la figura
-   real se rechaza siempre, cruce o no. */
+   pedida sin necesitar geometría aparte. */
 function ConstellationTraceGame({ constellation, height=320, width=880 }: { constellation: ConstellationData; height?: number; width?: number }) {
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
-  const [drawn, setDrawn]             = useState<Set<string>>(new Set())
-  const [shakeIdx, setShakeIdx]       = useState<number | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [drawn, setDrawn]         = useState<Set<string>>(new Set())
+  const [dragFrom, setDragFrom]   = useState<number | null>(null)
+  const [dragPos, setDragPos]     = useState<{ x: number; y: number } | null>(null)
+  const [rejecting, setRejecting] = useState(false)
+  const draggingRef = useRef(false)
 
   const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`)
   const validKeys = useMemo(() => new Set(constellation.lines.map(([a, b]) => pairKey(a, b))), [constellation])
@@ -1041,28 +1052,88 @@ function ConstellationTraceGame({ constellation, height=320, width=880 }: { cons
     }
   }, [constellation, width, height])
 
-  const handleStar = (idx: number) => {
-    if (complete) return
-    if (selectedIdx === null) { setSelectedIdx(idx); return }
-    if (selectedIdx === idx) { setSelectedIdx(null); return }
-    const k = pairKey(selectedIdx, idx)
-    if (validKeys.has(k) && !drawn.has(k)) {
-      setDrawn(prev => new Set(prev).add(k))
-      setSelectedIdx(null)
-    } else {
-      // No es una línea real de la figura (o ya estaba trazada) — se
-      // rechaza y se deja la nueva estrella elegida como punto de partida,
-      // para que el usuario pueda seguir intentando sin tener que volver a
-      // tocar la primera.
-      setShakeIdx(idx)
-      setTimeout(() => setShakeIdx(null), 320)
-      setSelectedIdx(idx)
+  // Se resetea el progreso cada vez que cambia la constelación mostrada.
+  useEffect(() => { setDrawn(new Set()); setDragFrom(null); setDragPos(null) }, [constellation])
+
+  const HIT_R = 20 // radio (en unidades del viewBox) para "atrapar" la estrella de destino al soltar
+
+  const svgPoint = (clientX: number, clientY: number) => {
+    const svg = svgRef.current
+    if (!svg) return { x: 0, y: 0 }
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return { x: 0, y: 0 }
+    const pt = svg.createSVGPoint()
+    pt.x = clientX; pt.y = clientY
+    const p = pt.matrixTransform(ctm.inverse())
+    return { x: p.x, y: p.y }
+  }
+
+  const nearestStar = (pos: { x: number; y: number }) => {
+    let best: number | null = null, bestD = HIT_R
+    constellation.stars.forEach((s, i) => {
+      const d = Math.hypot(toX(s[0]) - pos.x, toY(s[1]) - pos.y)
+      if (d < bestD) { bestD = d; best = i }
+    })
+    return best
+  }
+
+  const animateSnapBack = (from: { x: number; y: number }, to: { x: number; y: number }, done: () => void) => {
+    const t0 = performance.now(), dur = 180
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / dur)
+      const eased = 1 - Math.pow(1 - t, 2)
+      setDragPos({ x: from.x + (to.x - from.x) * eased, y: from.y + (to.y - from.y) * eased })
+      if (t < 1) requestAnimationFrame(step)
+      else done()
     }
+    requestAnimationFrame(step)
+  }
+
+  const handlePointerDown = (idx: number) => (e: React.PointerEvent) => {
+    if (complete) return
+    e.preventDefault()
+    ;(e.target as Element).setPointerCapture(e.pointerId)
+    draggingRef.current = true
+    setDragFrom(idx)
+    const s = constellation.stars[idx]
+    setDragPos({ x: toX(s[0]), y: toY(s[1]) })
+  }
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!draggingRef.current) return
+    setDragPos(svgPoint(e.clientX, e.clientY))
+  }
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!draggingRef.current || dragFrom === null) return
+    draggingRef.current = false
+    const pos = svgPoint(e.clientX, e.clientY)
+    const origin = dragFrom
+    const originStar = constellation.stars[origin]
+    const originPos = { x: toX(originStar[0]), y: toY(originStar[1]) }
+    const target = nearestStar(pos)
+
+    if (target !== null && target !== origin) {
+      const k = pairKey(origin, target)
+      if (validKeys.has(k) && !drawn.has(k)) {
+        setDrawn(prev => new Set(prev).add(k))
+        setDragFrom(null); setDragPos(null)
+        return
+      }
+    }
+    // No cayó sobre la estrella correcta (o esa línea no es real / ya
+    // estaba trazada, o la soltaron afuera de la ventana): la línea se
+    // retrae de vuelta al punto de origen en vez de quedar suelta.
+    setRejecting(true)
+    animateSnapBack(pos, originPos, () => { setRejecting(false); setDragFrom(null); setDragPos(null) })
   }
 
   return (
     <div className="relative" style={{ width: '100%', height, background: '#00000a' }}>
-      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} style={{ display: 'block' }}>
+      <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} width="100%" height={height}
+        style={{ display: 'block', touchAction: 'none' }}
+        onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}
+      >
         <defs>
           <linearGradient id="traceGrad" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#A78BFA" /><stop offset="100%" stopColor="#22D3EE" />
@@ -1078,29 +1149,31 @@ function ConstellationTraceGame({ constellation, height=320, width=880 }: { cons
           )
         })}
 
-        {selectedIdx !== null && (() => {
-          const s = constellation.stars[selectedIdx]
-          return <circle cx={toX(s[0])} cy={toY(s[1])} r={13} fill="none" stroke="#22D3EE" strokeWidth={1.4} opacity={0.55} />
+        {/* Línea "elástico" en vivo mientras se arrastra desde una estrella */}
+        {dragFrom !== null && dragPos && (() => {
+          const s = constellation.stars[dragFrom]
+          return (
+            <line x1={toX(s[0])} y1={toY(s[1])} x2={dragPos.x} y2={dragPos.y}
+              stroke={rejecting ? '#FB7185' : '#67E8F9'} strokeWidth={2.4} strokeLinecap="round"
+              opacity={0.9} style={{ pointerEvents: 'none' }} />
+          )
         })()}
 
         {constellation.stars.map((s, i) => {
           const px = toX(s[0]), py = toY(s[1])
-          const isSel = selectedIdx === i
-          const isShake = shakeIdx === i
+          const isOrigin = dragFrom === i
           return (
-            <g key={i} onClick={() => handleStar(i)} style={{ cursor: complete ? 'default' : 'pointer' }}>
-              {/* Círculo invisible más grande solo para ampliar el área de toque en móvil */}
-              <circle cx={px} cy={py} r={16} fill="transparent" />
-              {isShake && <circle cx={px} cy={py} r={11} fill="none" stroke="#FB7185" strokeWidth={1.6} opacity={0.7} />}
-              <circle cx={px} cy={py} r={isSel ? 6.5 : 4.5}
-                fill={isShake ? '#FB7185' : isSel ? '#DDFAFF' : '#fff'} />
+            <g key={i} onPointerDown={handlePointerDown(i)} style={{ cursor: complete ? 'default' : 'grab', touchAction: 'none' }}>
+              {/* Círculo invisible más grande solo para ampliar el área de agarre en móvil */}
+              <circle cx={px} cy={py} r={18} fill="transparent" />
+              <circle cx={px} cy={py} r={isOrigin ? 6.5 : 4.5} fill={isOrigin ? '#DDFAFF' : '#fff'} />
             </g>
           )
         })}
       </svg>
 
       {/* Progreso */}
-      <div className="absolute top-2 left-2 px-2.5 py-1 rounded-full font-display text-[0.4rem] tracking-[2px]"
+      <div className="absolute top-2 left-2 px-2.5 py-1 rounded-full font-display text-[0.4rem] tracking-[2px] pointer-events-none"
         style={{ background: 'rgba(2,3,16,0.75)', border: '1px solid rgba(255,255,255,0.08)', color: complete ? '#67e8f9' : 'rgba(255,255,255,0.45)' }}>
         {complete ? '¡FIGURA COMPLETA!' : `${drawn.size} / ${total} LÍNEAS`}
       </div>
@@ -1470,13 +1543,46 @@ function ConstellationCreator({ onSave, onClose }: { onSave?: (c: ConstellationD
     const canvas = canvasRef.current!
     const W = canvas.offsetWidth, H = canvas.offsetHeight
     const saved_name = name.trim()
+
+    // Las estrellas se dibujan en un lienzo grande y suelto (el laboratorio
+    // ocupa gran parte de la ventana flotante), así que guardarlas tal cual
+    // como fracción de ese lienzo (x/W, y/H) las dejaba con un "spread"
+    // dependiente de qué tan junto o separado dibujó el usuario — a veces
+    // enorme, a veces minúsculo. Al mostrarlas en el mapa grande o en una
+    // vista mini, cada una se auto-encuadra a como si fuera su único
+    // tamaño "natural", así que un spread minúsculo se veía perfectamente
+    // recortado — pero un spread grande relativo a las constelaciones
+    // reales (que rondan ~0.1-0.2 en el espacio normalizado del mapa)
+    // hacía que la figura pareciera "gigante" y el nombre quedara flotando
+    // lejos de sus propias líneas en el mapa grande. Acá se reescala la
+    // figura ya dibujada (conservando su forma y proporciones) a un
+    // tamaño estándar comparable al de una constelación real de tamaño
+    // mediano, para que se vea consistente en cualquier vista.
+    const rawStars = starsRef.current.map(s => [s.x / W, s.y / H] as [number, number])
+    const xs = rawStars.map(s => s[0]), ys = rawStars.map(s => s[1])
+    const minX = Math.min(...xs), maxX = Math.max(...xs)
+    const minY = Math.min(...ys), maxY = Math.max(...ys)
+    const drawCx = (minX + maxX) / 2, drawCy = (minY + maxY) / 2
+    const rawSpread = Math.max(maxX - minX, maxY - minY, 0.01)
+    const TARGET_SPREAD = 0.16 // spread típico de una constelación real de tamaño mediano
+    const scale = TARGET_SPREAD / rawSpread
+    // El centro final se mantiene donde el usuario centró su dibujo, pero
+    // alejado de los bordes del mapa para que la figura reescalada no
+    // termine saliéndose del área visible.
+    const finalCx = Math.min(0.85, Math.max(0.15, drawCx))
+    const finalCy = Math.min(0.85, Math.max(0.15, drawCy))
+    const normalizedStars = rawStars.map(([x, y]) => [
+      +(finalCx + (x - drawCx) * scale).toFixed(4),
+      +(finalCy + (y - drawCy) * scale).toFixed(4),
+    ] as [number, number])
+
     const entry: ConstellationData = {
       name:   saved_name,
       alias:  'Constelación Personalizada',
       type:   'custom',
       figure: 'Creación personal',
       desc:   `Constelación creada con ${starsRef.current.length} estrellas.`,
-      stars:  starsRef.current.map(s => [+(s.x/W).toFixed(4), +(s.y/H).toFixed(4)] as [number,number]),
+      stars:  normalizedStars,
       lines:  linesRef.current.map(([a,b]) => [a,b] as [number,number]),
     }
     try {
