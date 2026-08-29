@@ -9,6 +9,7 @@ import { planets, type PlanetData } from '@/lib/data'
 import { withBasePath } from '@/lib/basePath'
 import SystemFlybyView from './SystemFlyby'
 import { useDeepNav } from './DeepNavEngine'
+import { IS_LOW_END, LOW_RES_TEXTURES } from '@/lib/deviceTier'
 
 // Este módulo solo se carga en el cliente (dynamic(..., { ssr: false }) en
 // page.tsx), así que leer window acá arriba es seguro — no hay versión de
@@ -17,13 +18,19 @@ import { useDeepNav } from './DeepNavEngine'
 // planeta, cantidad de estrellas/asteroides, y antialiasing — bajarlos un
 // escalón ahí no se nota a simple vista, pero libera bastante GPU/CPU.
 const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth < 768
+// No todos los celulares aguantan lo mismo: IS_MOBILE es binario (celular sí/no),
+// pero un gama baja real (2-3GB RAM, pocos núcleos, red lenta — ver deviceTier.ts)
+// necesita un escalón extra de recorte, no el mismo ajuste que un gama media. Esto
+// SOLO se activa si además es celular — una laptop vieja de escritorio entra por
+// la rama de optimización de computadora (más abajo), no por acá.
+const IS_LOW_END_MOBILE = IS_MOBILE && IS_LOW_END
 // Segunda pasada de optimización mobile — bajados un escalón más de lo que ya
 // estaban (antes 40/28/28): a esta distancia de cámara la diferencia de
 // segmentos no se nota, pero son bastantes menos triángulos por esfera ×
 // 8 planetas + Sol + luna(s) + aros, todos los cuadros.
-const ORBIT_SEGMENTS = IS_MOBILE ? 28 : 64
-const PLANET_SEGMENTS = IS_MOBILE ? 20 : 48
-const DETAIL_SEGMENTS = IS_MOBILE ? 20 : 48
+const ORBIT_SEGMENTS = IS_LOW_END_MOBILE ? 16 : IS_MOBILE ? 28 : 64
+const PLANET_SEGMENTS = IS_LOW_END_MOBILE ? 12 : IS_MOBILE ? 20 : 48
+const DETAIL_SEGMENTS = IS_LOW_END_MOBILE ? 12 : IS_MOBILE ? 20 : 48
 export const SUN_RADIUS = 2.5
 
 /* ====== SHARED GEOMETRIES ====== */
@@ -80,7 +87,7 @@ function getCloudTexture(seed: string): THREE.CanvasTexture {
    En celular se reduce la cantidad de partículas: la erupción solo se ve al
    tocar el Sol, pero durante sus ~2.2s cada partícula recalcula física por
    cuadro — con menos sprites el mismo golpe visual cuesta bastante menos CPU. */
-const N_PLASMA = IS_MOBILE ? 14 : 30
+const N_PLASMA = IS_LOW_END_MOBILE ? 6 : IS_MOBILE ? 14 : 30
 
 interface PlasmaP { pos: THREE.Vector3; vel: THREE.Vector3; age: number; life: number }
 
@@ -313,11 +320,13 @@ export const Sun = memo(function Sun() {
   // ve mientras tanto es el glow+luz cálidos, nunca un círculo negro.
   const readyRef = useRef(false)
 
-  // El Sol es la única textura que sigue diferenciando por dispositivo: en
-  // compu se queda en 8k (nitidez completa), en celular/tablet usa la 2k
-  // liviana para no pesar la carga inicial.
+  // El Sol usa 2k SIEMPRE, también en computadora — la 8k pesaba varios MB
+  // extra por sí sola y era una de las causas de que la carga inicial (y
+  // los trabones ocasionales reportados en compu) tardara más de lo que
+  // debería. A la distancia normal de cámara la diferencia de nitidez
+  // 2k→8k no se nota; el ahorro de descarga y de memoria de textura sí.
   const texture = useMemo(
-    () => loadTexture(withBasePath(IS_MOBILE ? '/textures/2k_sun.jpg' : '/textures/8k_sun.jpg')),
+    () => loadTexture(withBasePath('/textures/2k_sun.jpg')),
     [],
   )
 
@@ -413,7 +422,16 @@ export function Planet({ data, speedMul, onHover, onLeave, onClick, registerRef 
   const cloudRef = useRef<THREE.Mesh>(null!)
   const [hovered, setHovered] = useState(false)
 
-  const texture = useMemo(() => loadTexture(data.textureUrl), [data.textureUrl])
+  // En gama baja de celular se usa la textura liviana de respaldo (si existe
+  // para este planeta — solo Marte/Júpiter/Saturno/Urano la tienen) en vez
+  // de la 2k real: para este nivel el objetivo es que cargue rápido y no se
+  // trabe, no que se vea perfecta. El resto de los planetas (Mercurio,
+  // Venus, Tierra, Neptuno) no tiene alternativa liviana todavía y sigue
+  // usando su 2k normal en todos los niveles.
+  const texture = useMemo(() => {
+    const lowResOverride = IS_LOW_END_MOBILE ? LOW_RES_TEXTURES[data.name] : undefined
+    return loadTexture(lowResOverride ?? data.textureUrl)
+  }, [data.textureUrl, data.name])
   const emissiveColor = useMemo(() => new THREE.Color(data.color), [data.color])
   const mainGeo = useMemo(() => getSharedSphere(data.size, PLANET_SEGMENTS), [data.size])
   // Segmentos del aro/hitbox: en celular se bajan también — son mallas chicas
@@ -632,7 +650,7 @@ export const OrbitPaths = memo(function OrbitPaths() {
 })
 
 /* ====== ASTEROID BELT ====== */
-const ASTEROID_COUNT = IS_MOBILE ? 80 : 400
+const ASTEROID_COUNT = IS_LOW_END_MOBILE ? 30 : IS_MOBILE ? 80 : 400
 export const AsteroidBelt = memo(function AsteroidBelt() {
   const positions = useMemo(() => {
     const p = new Float32Array(ASTEROID_COUNT * 3)
@@ -788,7 +806,7 @@ function Scene({ speedMul, onPlanetHover, onPlanetLeave, onPlanetClick, flyTarge
     <>
       <ambientLight intensity={0.5} color="#334466" />
       <directionalLight position={[-15, 5, -20]} intensity={0.6} color="#6680cc" />
-      <Stars radius={180} depth={80} count={IS_MOBILE ? 550 : 1800} factor={3} saturation={0} />
+      <Stars radius={180} depth={80} count={IS_LOW_END_MOBILE ? 260 : IS_MOBILE ? 550 : 1800} factor={3} saturation={0} />
       <Sun />
       {planets.map((p) => (
         <Planet key={p.name} data={p} speedMul={speedMul} onHover={onPlanetHover} onLeave={onPlanetLeave}
@@ -1064,7 +1082,7 @@ export default function SolarSystem() {
           rato" que reportaron. 'low-power' en mobile prioriza consistencia
           sobre pico de fps, que es lo que realmente se necesita acá. */}
       {!flying && (
-        <Canvas camera={{ position: [0, 30, 55], fov: 50 }} dpr={IS_MOBILE ? [0.5, 0.85] : [0.75, 1.25]} frameloop={depth === 1 ? 'always' : 'never'}
+        <Canvas camera={{ position: [0, 30, 55], fov: 50 }} dpr={IS_LOW_END_MOBILE ? [0.4, 0.6] : IS_MOBILE ? [0.5, 0.85] : [0.75, 1.25]} frameloop={depth === 1 ? 'always' : 'never'}
           gl={{ antialias: !IS_MOBILE, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2, powerPreference: IS_MOBILE ? 'low-power' : 'high-performance' }}
           onPointerMove={handlePointerMove}>
           <Suspense fallback={null}>

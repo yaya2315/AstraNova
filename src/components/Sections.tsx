@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, useInView, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import { chapters, constellations, missions, galleryImages, type ConstellationData } from '@/lib/data'
@@ -541,6 +541,12 @@ export function ConstellationsSection() {
   const [hovered, setHovered]   = useState<ConstellationData | null>(null)
   const [selected, setSelected] = useState<ConstellationData | null>(null)
   const [navDir, setNavDir]     = useState(0)
+  // Modo "conectar los puntos": en vez de mostrar la figura ya dibujada,
+  // se ocultan las líneas y el usuario las reconstruye tocando estrella por
+  // estrella. Se resetea cada vez que cambia la constelación seleccionada
+  // (abrir otra, o navegar con ANTERIOR/SIGUIENTE) para no arrastrar el
+  // progreso de una figura a la siguiente.
+  const [gameMode, setGameMode] = useState(false)
   const bgStars = useRef<{ x:number;y:number;r:number;o:number;tw:number }[]>([])
   const animRef = useRef<number>(0)
   const timeRef = useRef(0)
@@ -771,7 +777,9 @@ export function ConstellationsSection() {
     setSelected(filteredConstellations[(idx+dir+filteredConstellations.length)%filteredConstellations.length])
   }
 
-  const filters = [{key:'all',label:'Todas'},{key:'zodiacal',label:'Zodiacales'},{key:'boreal',label:'Boreales'},{key:'austral',label:'Australes'}]
+  useEffect(() => { setGameMode(false) }, [selected])
+
+  const filters = [{key:'all',label:'Todas'},{key:'zodiacal',label:'Zodiacales'},{key:'boreal',label:'Boreales'},{key:'austral',label:'Australes'},{key:'historica',label:'Históricas'}]
 
   return (
     <section id="constelaciones" className="relative z-[1] pt-40 pb-24">
@@ -861,13 +869,25 @@ export function ConstellationsSection() {
                     transition={{duration:0.38,ease:[0.22,1,0.36,1]}}
                     className="flex flex-col h-full overflow-hidden">
 
-                    {/* Mini star view */}
-                    <ConstellationZoomView constellation={selected} height={200} width={PANEL_W}/>
+                    {/* Mini star view / juego de conectar los puntos */}
+                    <div className="relative">
+                      {gameMode
+                        ? <ConstellationTraceGame key={selected.name} constellation={selected} height={200} width={PANEL_W}/>
+                        : <ConstellationZoomView constellation={selected} height={200} width={PANEL_W}/>}
+                      <button
+                        onClick={()=>setGameMode(m=>!m)}
+                        className="absolute bottom-2 right-2 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full font-display text-[0.42rem] tracking-[2px] transition-colors"
+                        style={{background:'rgba(2,3,16,0.75)',border:'1px solid rgba(34,211,238,0.25)',color:gameMode?'#fff':'#67e8f9',backdropFilter:'blur(8px)'}}
+                        aria-label={gameMode ? 'Ver la figura completa' : 'Jugar a conectar los puntos'}
+                      >
+                        {gameMode ? 'VER FIGURA' : 'CONECTAR PUNTOS'}
+                      </button>
+                    </div>
 
                     {/* Info */}
                     <div className="flex-1 px-6 py-5 overflow-y-auto" style={{scrollbarWidth:'none'}}>
                       <div className="inline-block px-2.5 py-0.5 rounded-full border border-accent-gold/15 text-accent-gold/50 text-[0.44rem] font-display tracking-[3px] uppercase mb-3">
-                        {selected.type==='zodiacal'?'ZODIACAL':selected.type==='boreal'?'BOREAL':selected.type==='austral'?'AUSTRAL':'PERSONALIZADA'}
+                        {selected.type==='zodiacal'?'ZODIACAL':selected.type==='boreal'?'BOREAL':selected.type==='austral'?'AUSTRAL':selected.type==='historica'?'HISTÓRICA':'PERSONALIZADA'}
                       </div>
                       <h3 className="font-display text-xl font-bold text-white mb-0.5 leading-tight">{selected.name}</h3>
                       <div className="text-accent-cyan/40 italic text-[0.62rem] mb-4 font-serif">{selected.alias}</div>
@@ -968,6 +988,115 @@ function ConstellationZoomView({ constellation, height=320, width=880 }: { const
   },[constellation,height,width])
 
   return <canvas ref={canvasRef} style={{width:'100%',height:`${height}px`,display:'block'}}/>
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONSTELLATION TRACE GAME — "conectar los puntos"
+
+   Se muestran las estrellas reales de la constelación SIN sus líneas. El
+   usuario toca (o hace click en) dos estrellas para trazar la línea entre
+   ellas — funciona igual con dedo que con mouse porque usa onClick, que el
+   navegador dispara para ambos sin lógica separada de touch/drag.
+
+   Regla de "no cruzar líneas a menos que la figura real lo requiera": en vez
+   de detectar cruces geométricos en vivo (frágil y confuso para el usuario:
+   ¿qué cruce es "válido"?), se valida cada intento contra el set real de
+   segmentos de `constellation.lines`. Como esas líneas son las coordenadas
+   REALES de la constelación, dos líneas de esa lista solo se cruzan en
+   pantalla si la figura verdadera se cruza a sí misma ahí — por eso
+   aceptar únicamente pares que estén en `lines` ya implementa la regla
+   pedida sin necesitar geometría aparte: un cruce entre dos líneas
+   aceptadas es, por definición, un cruce que la constelación real tiene, y
+   cualquier línea que el usuario intente que NO sea parte de la figura
+   real se rechaza siempre, cruce o no. */
+function ConstellationTraceGame({ constellation, height=320, width=880 }: { constellation: ConstellationData; height?: number; width?: number }) {
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
+  const [drawn, setDrawn]             = useState<Set<string>>(new Set())
+  const [shakeIdx, setShakeIdx]       = useState<number | null>(null)
+
+  const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`)
+  const validKeys = useMemo(() => new Set(constellation.lines.map(([a, b]) => pairKey(a, b))), [constellation])
+  const total = constellation.lines.length
+  const complete = drawn.size === total
+
+  // Encuadre idéntico al de ConstellationZoomView, para que el juego se vea
+  // en la misma posición/escala que la vista normal de la figura.
+  const { toX, toY } = useMemo(() => {
+    const xs = constellation.stars.map(s => s[0]), ys = constellation.stars.map(s => s[1])
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2
+    const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 0.05) * 2.2
+    const pad = 38
+    return {
+      toX: (v: number) => pad + ((v - cx) / span + 0.5) * (width - 2 * pad),
+      toY: (v: number) => pad + ((v - cy) / span + 0.5) * (height - 2 * pad),
+    }
+  }, [constellation, width, height])
+
+  const handleStar = (idx: number) => {
+    if (complete) return
+    if (selectedIdx === null) { setSelectedIdx(idx); return }
+    if (selectedIdx === idx) { setSelectedIdx(null); return }
+    const k = pairKey(selectedIdx, idx)
+    if (validKeys.has(k) && !drawn.has(k)) {
+      setDrawn(prev => new Set(prev).add(k))
+      setSelectedIdx(null)
+    } else {
+      // No es una línea real de la figura (o ya estaba trazada) — se
+      // rechaza y se deja la nueva estrella elegida como punto de partida,
+      // para que el usuario pueda seguir intentando sin tener que volver a
+      // tocar la primera.
+      setShakeIdx(idx)
+      setTimeout(() => setShakeIdx(null), 320)
+      setSelectedIdx(idx)
+    }
+  }
+
+  return (
+    <div className="relative" style={{ width: '100%', height, background: '#00000a' }}>
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} style={{ display: 'block' }}>
+        <defs>
+          <linearGradient id="traceGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#A78BFA" /><stop offset="100%" stopColor="#22D3EE" />
+          </linearGradient>
+        </defs>
+
+        {[...drawn].map(k => {
+          const [a, b] = k.split('-').map(Number)
+          const sa = constellation.stars[a], sb = constellation.stars[b]
+          return (
+            <line key={k} x1={toX(sa[0])} y1={toY(sa[1])} x2={toX(sb[0])} y2={toY(sb[1])}
+              stroke="url(#traceGrad)" strokeWidth={2.2} strokeLinecap="round" opacity={0.95} />
+          )
+        })}
+
+        {selectedIdx !== null && (() => {
+          const s = constellation.stars[selectedIdx]
+          return <circle cx={toX(s[0])} cy={toY(s[1])} r={13} fill="none" stroke="#22D3EE" strokeWidth={1.4} opacity={0.55} />
+        })()}
+
+        {constellation.stars.map((s, i) => {
+          const px = toX(s[0]), py = toY(s[1])
+          const isSel = selectedIdx === i
+          const isShake = shakeIdx === i
+          return (
+            <g key={i} onClick={() => handleStar(i)} style={{ cursor: complete ? 'default' : 'pointer' }}>
+              {/* Círculo invisible más grande solo para ampliar el área de toque en móvil */}
+              <circle cx={px} cy={py} r={16} fill="transparent" />
+              {isShake && <circle cx={px} cy={py} r={11} fill="none" stroke="#FB7185" strokeWidth={1.6} opacity={0.7} />}
+              <circle cx={px} cy={py} r={isSel ? 6.5 : 4.5}
+                fill={isShake ? '#FB7185' : isSel ? '#DDFAFF' : '#fff'} />
+            </g>
+          )
+        })}
+      </svg>
+
+      {/* Progreso */}
+      <div className="absolute top-2 left-2 px-2.5 py-1 rounded-full font-display text-[0.4rem] tracking-[2px]"
+        style={{ background: 'rgba(2,3,16,0.75)', border: '1px solid rgba(255,255,255,0.08)', color: complete ? '#67e8f9' : 'rgba(255,255,255,0.45)' }}>
+        {complete ? '¡FIGURA COMPLETA!' : `${drawn.size} / ${total} LÍNEAS`}
+      </div>
+    </div>
+  )
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

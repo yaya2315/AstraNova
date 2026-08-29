@@ -509,7 +509,7 @@ function SystemScene({ bodyRefs }: { bodyRefs: React.RefObject<Map<string, BodyE
     <>
       <ambientLight intensity={0.5} color="#334466" />
       <directionalLight position={[-15, 5, -20]} intensity={0.6} color="#6680cc" />
-      <Stars radius={220} depth={100} count={IS_MOBILE ? 1500 : 4000} factor={3} saturation={0} fade />
+      <Stars radius={220} depth={100} count={IS_MOBILE ? 1500 : 2600} factor={3} saturation={0} fade />
       {!IS_MOBILE && <Galaxies />}
       <Sun />
       {planets.map((p: PlanetData) => (
@@ -573,7 +573,7 @@ export default function SystemFlybyView({ onExit }: { onExit: () => void }) {
       {/* Mismo criterio que el canvas principal de SolarSystem: en celular
           'low-power' + dpr más bajo evita que el chip sostenga clocks altos
           y termine con throttling térmico en sesiones de vuelo largas. */}
-      <Canvas camera={{ fov: CAMERA_FOV }} dpr={IS_MOBILE ? [0.5, 0.85] : [1, 1.5]}
+      <Canvas camera={{ fov: CAMERA_FOV }} dpr={IS_MOBILE ? [0.5, 0.85] : [1, 1.3]}
         gl={{ antialias: !IS_MOBILE, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1, powerPreference: IS_MOBILE ? 'low-power' : 'high-performance' }}>
         <SystemScene bodyRefs={bodyRefs} />
         <FlightRig steerRef={steerRef} thrustRef={thrustRef} bodyRefs={bodyRefs}

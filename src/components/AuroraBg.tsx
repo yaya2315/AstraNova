@@ -210,13 +210,20 @@ export default function AuroraBg({ pauseOnMobile = false }: { pauseOnMobile?: bo
     gl.uniform3f(uAccent,   0.94, 0.75, 0.36)  // --aurora-accent: gold
 
     // ── Resize handler ────────────────────────────────────────────────────
-    const DPR_CAP = 1.25
+    // DPR_CAP bajado de 1.25 a 1.1: este shader es un fondo suave y con
+    // bastante grain/ruido de por sí — a esa resolución interna la pérdida
+    // de nitidez es imperceptible, y en compus con pantallas de alta
+    // densidad (dpr 2-3) representa bastantes menos píxeles reales por
+    // cuadro, todo el tiempo, en TODAS las secciones del sitio.
+    const DPR_CAP = 1.1
     const resize = () => {
       const dpr   = Math.min(window.devicePixelRatio || 1, DPR_CAP)
       // En celular se renderiza a menor resolución interna (el CSS la estira
       // igual a pantalla completa) — el shader tiene varias octavas de ruido
       // por píxel, así que menos píxeles reales = costo mucho menor por cuadro.
-      const scale = window.innerWidth < 768 ? 0.55 : 1.0
+      // En compu también se recorta un poco (1.0→0.85): sigue siendo nítido
+      // porque es un fondo desenfocado, pero ahorra ~28% de píxeles/cuadro.
+      const scale = window.innerWidth < 768 ? 0.55 : 0.85
       const w     = Math.round(window.innerWidth  * dpr * scale)
       const h     = Math.round(window.innerHeight * dpr * scale)
       canvas.width  = w
@@ -240,14 +247,17 @@ export default function AuroraBg({ pauseOnMobile = false }: { pauseOnMobile?: bo
       // todos modos — pausarla ahí libera GPU para lo que sí se ve.
       const isMobile          = window.innerWidth < 768
       const pausedForHeavyLayer = pauseRef.current && isMobile
-      // Fuera de esa capa (Inicio, Historia, Constelaciones, Galería,
-      // Misiones), este shader seguía corriendo a 60fps sin límite en
-      // celular — es un fondo decorativo fijo detrás de TODO el sitio, así
-      // que competía por GPU con cualquier otra animación en pantalla
-      // (incluido el logo del Sistema Solar en el menú). Se limita a ~30fps
-      // ahí saltando un cuadro de cada dos.
+      // Este shader es un fondo decorativo fijo detrás de TODO el sitio, y
+      // por lo lento que se mueve (uSpeed=0.18) no se nota ninguna
+      // diferencia si dibuja ~30 veces por segundo en vez de 60 — pero SÍ se
+      // nota la GPU/CPU libre que eso deja para todo lo demás. Antes esto
+      // solo se limitaba en celular; ahora se limita SIEMPRE (compu incluida)
+      // porque el usuario reportó trabas ocasionales también en escritorio,
+      // y este shader corriendo sin límite en cada sección del sitio era un
+      // candidato claro — compite por el mismo hilo/GPU que el Sistema
+      // Solar 3D, el logo animado del menú y el resto de animaciones.
       frameCount++
-      const skippedForFramerate = isMobile && frameCount % 2 !== 0
+      const skippedForFramerate = frameCount % 2 !== 0
       if (active && visible && !pausedForHeavyLayer && !skippedForFramerate) {
         gl.uniform1f(uTime, (now - t0) * 0.001)
         gl.drawArrays(gl.TRIANGLES, 0, 3)
