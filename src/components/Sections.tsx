@@ -541,6 +541,10 @@ export function ConstellationsSection() {
   const [hovered, setHovered]   = useState<ConstellationData | null>(null)
   const [selected, setSelected] = useState<ConstellationData | null>(null)
   const [navDir, setNavDir]     = useState(0)
+  // Confirmación de borrado (solo aplica a personalizadas): un primer click
+  // pide confirmar, un segundo click ya borra. Se resetea al cambiar de
+  // constelación para que no quede "armado" el borrado de otra figura.
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const bgStars = useRef<{ x:number;y:number;r:number;o:number;tw:number }[]>([])
   const animRef = useRef<number>(0)
   const timeRef = useRef(0)
@@ -777,6 +781,20 @@ export function ConstellationsSection() {
     panTo(next)
   }
 
+  useEffect(() => { setConfirmDelete(false) }, [selected])
+
+  // Solo las constelaciones personalizadas se pueden borrar (las reales no
+  // se tocan). Coincide por referencia, no por nombre, porque dos
+  // constelaciones personalizadas podrían compartir nombre.
+  const deleteCustomConstellation = (c: ConstellationData) => {
+    setCustomConstellations(prev => {
+      const next = prev.filter(x => x !== c)
+      try { localStorage.setItem('astra-custom-constellations-v1', JSON.stringify(next)) } catch {}
+      return next
+    })
+    if (selected === c) setSelected(null)
+  }
+
   const filters = [{key:'all',label:'Todas'},{key:'zodiacal',label:'Zodiacales'},{key:'boreal',label:'Boreales'},{key:'austral',label:'Australes'},{key:'historica',label:'Históricas'}]
 
   return (
@@ -895,6 +913,24 @@ export function ConstellationsSection() {
                         </svg>
                         <span className="text-[0.62rem] italic font-serif text-slate-600">{selected.figure}</span>
                       </div>
+
+                      {/* Borrar: solo constelaciones personalizadas — las
+                          reales (zodiacales/boreales/australes/históricas)
+                          no tienen esta opción. Un click pide confirmar,
+                          el segundo click ya borra. */}
+                      {selected.type === 'custom' && (
+                        <button onClick={() => confirmDelete ? deleteCustomConstellation(selected) : setConfirmDelete(true)}
+                          className={`mt-5 w-full flex items-center justify-center gap-1.5 font-display text-[0.48rem] tracking-[2px] px-4 py-2.5 rounded-full border transition-colors ${
+                            confirmDelete
+                              ? 'text-red-300 border-red-400/40 bg-red-400/10 hover:bg-red-400/15'
+                              : 'text-slate-600 border-white/10 hover:text-red-400/70 hover:border-red-400/25'
+                          }`}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="3,6 5,6 21,6"/><path d="M19,6v14a2,2 0 0 1-2,2H7a2,2 0 0 1-2-2V6m3,0V4a2,2 0 0 1 2-2h4a2,2 0 0 1 2,2v2"/>
+                          </svg>
+                          {confirmDelete ? 'CONFIRMAR BORRADO' : 'BORRAR CONSTELACIÓN'}
+                        </button>
+                      )}
                     </div>
 
                     {/* Navigation */}
