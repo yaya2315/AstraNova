@@ -541,12 +541,6 @@ export function ConstellationsSection() {
   const [hovered, setHovered]   = useState<ConstellationData | null>(null)
   const [selected, setSelected] = useState<ConstellationData | null>(null)
   const [navDir, setNavDir]     = useState(0)
-  // Modo "conectar los puntos": en vez de mostrar la figura ya dibujada,
-  // se ocultan las líneas y el usuario las reconstruye tocando estrella por
-  // estrella. Se resetea cada vez que cambia la constelación seleccionada
-  // (abrir otra, o navegar con ANTERIOR/SIGUIENTE) para no arrastrar el
-  // progreso de una figura a la siguiente.
-  const [gameMode, setGameMode] = useState(false)
   const bgStars = useRef<{ x:number;y:number;r:number;o:number;tw:number }[]>([])
   const animRef = useRef<number>(0)
   const timeRef = useRef(0)
@@ -774,10 +768,14 @@ export function ConstellationsSection() {
   const navigate = (dir: number) => {
     if (!selected) return
     const idx=filteredConstellations.indexOf(selected); setNavDir(dir)
-    setSelected(filteredConstellations[(idx+dir+filteredConstellations.length)%filteredConstellations.length])
+    const next = filteredConstellations[(idx+dir+filteredConstellations.length)%filteredConstellations.length]
+    setSelected(next)
+    // Antes solo cambiaba el contenido del panel — el mapa de fondo se
+    // quedaba quieto, así que no se veía a qué constelación te movías.
+    // panTo() ya existe (se usa al elegir del buscador); reusarlo acá hace
+    // que ANTERIOR/SIGUIENTE también desplace la cámara hacia la nueva.
+    panTo(next)
   }
-
-  useEffect(() => { setGameMode(false) }, [selected])
 
   const filters = [{key:'all',label:'Todas'},{key:'zodiacal',label:'Zodiacales'},{key:'boreal',label:'Boreales'},{key:'austral',label:'Australes'},{key:'historica',label:'Históricas'}]
 
@@ -801,6 +799,13 @@ export function ConstellationsSection() {
               {f.label}
             </button>
           ))}
+        </FadeUp>
+        <FadeUp delay={0.22} className="flex justify-center mb-8">
+          <ConstellationPicker
+            list={allConstellations}
+            buttonLabel="BUSCAR CONSTELACIÓN"
+            onPick={c => { setFilter('all'); setSelected(c); panTo(c) }}
+          />
         </FadeUp>
       </div>
 
@@ -869,20 +874,12 @@ export function ConstellationsSection() {
                     transition={{duration:0.38,ease:[0.22,1,0.36,1]}}
                     className="flex flex-col h-full overflow-hidden">
 
-                    {/* Mini star view / juego de conectar los puntos */}
-                    <div className="relative">
-                      {gameMode
-                        ? <ConstellationTraceGame key={selected.name} constellation={selected} height={200} width={PANEL_W}/>
-                        : <ConstellationZoomView constellation={selected} height={200} width={PANEL_W}/>}
-                      <button
-                        onClick={()=>setGameMode(m=>!m)}
-                        className="absolute bottom-2 right-2 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full font-display text-[0.42rem] tracking-[2px] transition-colors"
-                        style={{background:'rgba(2,3,16,0.75)',border:'1px solid rgba(34,211,238,0.25)',color:gameMode?'#fff':'#67e8f9',backdropFilter:'blur(8px)'}}
-                        aria-label={gameMode ? 'Ver la figura completa' : 'Jugar a conectar los puntos'}
-                      >
-                        {gameMode ? 'VER FIGURA' : 'CONECTAR PUNTOS'}
-                      </button>
-                    </div>
+                    {/* Mini star view — el juego de "conectar los puntos" ya
+                        no vive acá adentro: ahora es su propia tarjeta con
+                        página flotante, debajo del mapa (ver
+                        ConstellationGameCard), independiente de tener una
+                        constelación seleccionada en el mapa. */}
+                    <ConstellationZoomView constellation={selected} height={200} width={PANEL_W}/>
 
                     {/* Info */}
                     <div className="flex-1 px-6 py-5 overflow-y-auto" style={{scrollbarWidth:'none'}}>
@@ -922,7 +919,19 @@ export function ConstellationsSection() {
         </div>
       </FadeUp>
 
-      <ConstellationCreator onSave={c => setCustomConstellations(prev => [...prev, c])} />
+      {/* Dos tarjetas separadas debajo del mapa (antes era un único panel de
+          creación siempre abierto): cada una es solo título + indicaciones +
+          botón, y el botón abre la herramienta completa como página
+          flotante. Se apilan en una columna en celular. */}
+      <FadeUp delay={0.3} className="max-w-[1400px] mx-auto px-6 sm:px-8 md:px-12 lg:pl-[136px] mt-14 pb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <ConstellationCreatorCard onSaved={c => {
+            setCustomConstellations(prev => [...prev, c])
+            setFilter('all'); setSelected(c); panTo(c)
+          }} />
+          <ConstellationGameCard list={allConstellations} />
+        </div>
+      </FadeUp>
     </section>
   )
 }
@@ -1100,9 +1109,186 @@ function ConstellationTraceGame({ constellation, height=320, width=880 }: { cons
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONSTELLATION CREATOR — custom star-map builder
+   CONSTELLATION PICKER — buscador por tipo → nombre (no es texto libre: se
+   navega el árbol tipo→nombre y al tocar un nombre se dispara onPick).
+   Se reutiliza tanto en el buscador del mapa principal como en el modal del
+   juego de conectar los puntos, para no mantener dos implementaciones.
 ═══════════════════════════════════════════════════════════════════════════ */
-function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => void }) {
+const CONSTELLATION_TYPE_LABELS: Record<string, string> = {
+  zodiacal: 'Zodiacales', boreal: 'Boreales', austral: 'Australes',
+  historica: 'Históricas', custom: 'Personalizadas',
+}
+function ConstellationPicker({ list, onPick, buttonLabel = 'BUSCAR' }: {
+  list: ConstellationData[]; onPick: (c: ConstellationData) => void; buttonLabel?: string
+}) {
+  const [open, setOpen]         = useState(false)
+  const [openType, setOpenType] = useState<string | null>(null)
+
+  const groups = useMemo(() => {
+    const order = ['zodiacal', 'boreal', 'austral', 'historica', 'custom']
+    return order
+      .map(key => ({ key, label: CONSTELLATION_TYPE_LABELS[key], items: list.filter(c => c.type === key) }))
+      .filter(g => g.items.length > 0)
+  }, [list])
+
+  const close = () => { setOpen(false); setOpenType(null) }
+
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(o => !o)}
+        className={`flex items-center gap-2 font-display text-[0.6rem] tracking-[2px] px-5 py-2 rounded-full border transition-all duration-300 ${open ? 'border-accent-cyan/50 text-white bg-accent-cyan/8' : 'border-white/8 text-slate-600 hover:border-accent-cyan/25 hover:text-white'}`}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        {buttonLabel}
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" style={{transform: open ? 'rotate(180deg)' : 'none', transition:'transform 0.2s'}}><path d="M12 16l-8-8h16z"/></svg>
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop invisible: cerrar tocando afuera */}
+          <div className="fixed inset-0 z-40" onClick={close} />
+          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 w-[min(92vw,320px)] max-h-[360px] overflow-y-auto rounded-2xl p-2"
+            style={{background:'rgba(2,3,16,0.97)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)'}}>
+            {groups.map(g => (
+              <div key={g.key} className="mb-1 last:mb-0">
+                <button onClick={() => setOpenType(t => t === g.key ? null : g.key)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-display text-[0.55rem] tracking-[2px] text-white/70 hover:bg-white/5 transition-colors">
+                  <span>{g.label}</span>
+                  <span className="text-white/25">{g.items.length}</span>
+                </button>
+                {openType === g.key && (
+                  <div className="pl-2 pb-1">
+                    {g.items.map(c => (
+                      <button key={c.name} onClick={() => { onPick(c); close() }}
+                        className="w-full text-left px-3 py-2 rounded-lg text-[0.72rem] text-slate-400 hover:text-accent-cyan hover:bg-accent-cyan/5 transition-colors truncate">
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONSTELLATION CREATOR — custom star-map builder
+
+   Antes vivía siempre visible al fondo de la sección. Ahora es una tarjeta
+   compacta (título + indicaciones) con un botón que abre el laboratorio
+   completo como página flotante — así la sección no queda tan cargada, y
+   el laboratorio se siente como una herramienta a propósito, no algo que
+   hay que scrollear de largo para llegar a la galería.
+═══════════════════════════════════════════════════════════════════════════ */
+function ConstellationCreatorCard({ onSaved }: { onSaved: (c: ConstellationData) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="card-glass-static overflow-hidden p-7 flex flex-col h-full">
+      <p className="font-display text-[0.52rem] tracking-[3px] text-accent-purple/60 mb-1.5">LABORATORIO ESTELAR</p>
+      <h3 className="font-display font-bold text-white/80 text-base tracking-wide leading-tight mb-1.5">Crea tu Constelación</h3>
+      <p className="text-[0.82rem] text-slate-500 leading-relaxed mb-6 flex-1">
+        Colocá estrellas, trazá líneas entre ellas y ponele un nombre. Al guardarla aparece directo en el mapa estelar.
+      </p>
+      <button onClick={() => setOpen(true)}
+        className="self-start font-display text-[0.5rem] tracking-[2px] px-5 py-2.5 rounded-full text-accent-purple border border-accent-purple/30 hover:bg-accent-purple/10 transition-colors">
+        ABRIR LABORATORIO
+      </button>
+      {open && typeof document !== 'undefined' && createPortal(
+        <ConstellationCreator
+          onClose={() => setOpen(false)}
+          onSave={c => { onSaved(c); setOpen(false) }}
+        />,
+        document.body,
+      )}
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONSTELLATION GAME CARD — tarjeta compacta + página flotante con el juego
+   de conectar los puntos. Antes vivía embebido dentro de la ficha de cada
+   constelación (solo accesible después de tocar una en el mapa); ahora es
+   independiente: se elige la constelación a jugar desde el propio modal
+   (buscador por tipo→nombre, o "otra al azar"), sin depender del mapa.
+═══════════════════════════════════════════════════════════════════════════ */
+function ConstellationGameCard({ list }: { list: ConstellationData[] }) {
+  const [open, setOpen]     = useState(false)
+  const [target, setTarget] = useState<ConstellationData | null>(null)
+
+  const openRandom = () => {
+    setTarget(list[Math.floor(Math.random() * list.length)])
+    setOpen(true)
+  }
+
+  return (
+    <div className="card-glass-static overflow-hidden p-7 flex flex-col h-full">
+      <p className="font-display text-[0.52rem] tracking-[3px] text-accent-cyan/60 mb-1.5">DESAFÍO ESTELAR</p>
+      <h3 className="font-display font-bold text-white/80 text-base tracking-wide leading-tight mb-1.5">Conectá los Puntos</h3>
+      <p className="text-[0.82rem] text-slate-500 leading-relaxed mb-6 flex-1">
+        Elegí una constelación real y reconstruí su figura tocando las estrellas en el orden correcto.
+      </p>
+      <button onClick={openRandom}
+        className="self-start font-display text-[0.5rem] tracking-[2px] px-5 py-2.5 rounded-full text-accent-cyan border border-accent-cyan/35 hover:bg-accent-cyan/10 transition-colors">
+        JUGAR
+      </button>
+      {open && target && typeof document !== 'undefined' && createPortal(
+        <ConstellationGameModal list={list} initial={target} onClose={() => setOpen(false)} />,
+        document.body,
+      )}
+    </div>
+  )
+}
+
+function ConstellationGameModal({ list, initial, onClose }: {
+  list: ConstellationData[]; initial: ConstellationData; onClose: () => void
+}) {
+  const [current, setCurrent] = useState(initial)
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,4,0.75)', backdropFilter: 'blur(10px)' }}
+      onClick={onClose}
+    >
+      <div className="card-glass-static overflow-hidden w-full max-w-xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 px-5 sm:px-7 py-5 sm:py-6" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          <div className="min-w-0">
+            <p className="font-display text-[0.5rem] tracking-[3px] text-accent-cyan/60 mb-1.5">DESAFÍO ESTELAR</p>
+            <h3 className="font-display font-bold text-white/80 text-base tracking-wide leading-tight truncate">{current.name}</h3>
+            <p className="text-accent-cyan/40 italic text-[0.62rem] font-serif">{current.alias}</p>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar"
+            className="w-9 h-9 rounded-full flex items-center justify-center text-white/30 hover:text-white/75 active:text-white transition-colors flex-shrink-0"
+            style={{ border: '1px solid rgba(255,255,255,0.09)' }}>
+            <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="1" y1="1" x2="8" y2="8"/><line x1="8" y1="1" x2="1" y2="8"/></svg>
+          </button>
+        </div>
+
+        <div className="px-5 sm:px-7 pt-4 pb-2 flex items-center gap-2 flex-wrap">
+          <ConstellationPicker list={list} buttonLabel="ELEGIR CONSTELACIÓN" onPick={c => setCurrent(c)} />
+          <button onClick={() => setCurrent(list[Math.floor(Math.random() * list.length)])}
+            className="font-display text-[0.5rem] tracking-[2px] px-4 py-2 rounded-full text-slate-500 border border-white/10 hover:text-white/70 hover:border-white/25 transition-colors">
+            OTRA AL AZAR
+          </button>
+        </div>
+
+        {/* key=current.name fuerza que ConstellationTraceGame se reinicie
+            (estrellas/progreso limpios) cada vez que se cambia de figura. */}
+        <div className="mx-5 sm:mx-7 mb-4 mt-3 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.04)' }}>
+          <ConstellationTraceGame key={current.name} constellation={current} height={300} width={560} />
+        </div>
+
+        <div className="px-5 sm:px-7 pb-6">
+          <p className="text-[0.68rem] text-slate-500 leading-relaxed">{current.desc}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ConstellationCreator({ onSave, onClose }: { onSave?: (c: ConstellationData) => void; onClose?: () => void }) {
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const starsRef     = useRef<{x:number;y:number}[]>([])
   const linesRef     = useRef<[number,number][]>([])
@@ -1297,10 +1483,12 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
       const prev = JSON.parse(localStorage.getItem('astra-custom-constellations-v1') || '[]')
       prev.push(entry); localStorage.setItem('astra-custom-constellations-v1', JSON.stringify(prev))
     } catch {}
-    if (onSave) onSave(entry)
     setFeedback({text:`"${saved_name}" guardada en el mapa`, ok:true})
     setName(''); starsRef.current = []; linesRef.current = []; lineStartRef.current = null; draw()
-    setTimeout(() => setFeedback(null), 3000)
+    // Pequeña pausa antes de avisar/cerrar: así el usuario alcanza a ver el
+    // mensaje de "guardada" en vez de que la ventana flotante desaparezca
+    // de golpe apenas toca Enter o el botón Guardar.
+    setTimeout(() => { if (onSave) onSave(entry) }, 700)
   }
 
   const TOOLS = [
@@ -1309,34 +1497,53 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
     {k:'erase' as const, icon:'✕', label:'BORRAR'},
   ]
 
+  // Antes esto se renderizaba siempre visible, en línea, al fondo de la
+  // sección. Ahora vive dentro de una página flotante (portal a document.body)
+  // que abre ConstellationCreatorCard — por eso el fondo fijo + el botón de
+  // cerrar acá, y por eso `onClose` (además de `onSave`, que ya cierra solo
+  // al guardar con éxito).
   return (
-    <FadeUp delay={0.3} className="max-w-[1400px] mx-auto px-6 sm:px-8 md:px-12 lg:pl-[136px] mt-14 pb-6">
-      <div className="card-glass-static overflow-hidden">
-
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+      style={{background:'rgba(0,0,4,0.75)', backdropFilter:'blur(10px)'}}
+      onClick={onClose}
+    >
+      <div className="card-glass-static overflow-hidden w-full max-w-2xl max-h-[92vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 px-7 py-6"
+        <div className="flex items-start justify-between gap-3 px-5 sm:px-7 py-5 sm:py-6"
              style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-          <div>
-            <p className="font-display text-[0.52rem] tracking-[3px] text-accent-cyan/60 mb-1.5">
+          <div className="min-w-0">
+            <p className="font-display text-[0.5rem] sm:text-[0.52rem] tracking-[3px] text-accent-cyan/60 mb-1.5">
               LABORATORIO ESTELAR
             </p>
             <h3 className="font-display font-bold text-white/80 text-base tracking-wide leading-tight">
               Crea tu Constelación
             </h3>
-            <p className="text-[0.82rem] text-slate-500 mt-1.5 leading-relaxed">
+            <p className="text-[0.78rem] sm:text-[0.82rem] text-slate-500 mt-1.5 leading-relaxed">
               Coloca estrellas · traza líneas · ponle nombre · guárdala.
             </p>
           </div>
-          <button onClick={handleClear}
-            className="flex-shrink-0 font-display text-[0.47rem] tracking-[2px] px-4 py-2 rounded-full text-slate-600 hover:text-white/50 transition-colors"
-            style={{border:'1px solid rgba(255,255,255,0.07)'}}>
-            LIMPIAR
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={handleClear}
+              className="font-display text-[0.44rem] sm:text-[0.47rem] tracking-[2px] px-3 sm:px-4 py-2 rounded-full text-slate-600 hover:text-white/50 transition-colors whitespace-nowrap"
+              style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+              LIMPIAR
+            </button>
+            <button onClick={onClose} aria-label="Cerrar"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white/30 hover:text-white/75 active:text-white transition-colors"
+              style={{border:'1px solid rgba(255,255,255,0.09)'}}>
+              <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <line x1="1" y1="1" x2="8" y2="8"/><line x1="8" y1="1" x2="1" y2="8"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Toolbar: modo de dibujo + nombre, todo en una fila directamente
-            encima del lienzo (antes el nombre quedaba suelto debajo). */}
-        <div className="flex gap-3 items-center flex-wrap px-7 pt-5 pb-4">
+            encima del lienzo (antes el nombre quedaba suelto debajo). En
+            celular se apila en varias filas en vez de comprimirse. */}
+        <div className="flex gap-3 items-center flex-wrap px-5 sm:px-7 pt-5 pb-4">
           <div className="flex gap-2 flex-wrap">
             {TOOLS.map(t => (
               <button key={t.k} onClick={() => switchMode(t.k)}
@@ -1358,24 +1565,35 @@ function ConstellationCreator({ onSave }: { onSave?: (c: ConstellationData) => v
             onFocus={e => { e.currentTarget.style.borderColor='rgba(34,211,238,0.35)'; e.currentTarget.style.background='rgba(34,211,238,0.04)' }}
             onBlur={e  => { e.currentTarget.style.borderColor='rgba(255,255,255,0.07)'; e.currentTarget.style.background='rgba(255,255,255,0.03)' }}
           />
-          {feedback && (
-            <span className={`font-display text-[0.5rem] tracking-[2px] px-5 py-2.5 rounded-xl border ${
+          {/* Botón "Guardar" explícito: antes la única forma de guardar era
+              presionar Enter en el campo de nombre, algo poco descubrible en
+              celular (donde tocar Enter en el teclado táctil no siempre es
+              obvio). Ahora hay un botón visible en todas las pantallas. */}
+          <button onClick={handleSave}
+            className="font-display text-[0.5rem] tracking-[2px] px-5 py-2.5 rounded-full text-accent-cyan border border-accent-cyan/35 hover:bg-accent-cyan/10 transition-colors whitespace-nowrap">
+            GUARDAR
+          </button>
+        </div>
+
+        {feedback && (
+          <div className="px-5 sm:px-7 pb-2">
+            <span className={`inline-block font-display text-[0.5rem] tracking-[2px] px-5 py-2.5 rounded-xl border ${
               feedback.ok
                 ? 'text-accent-cyan/80 border-accent-cyan/20'
                 : 'text-red-400/80 border-red-400/20'
             }`} style={{background: feedback.ok ? 'rgba(34,211,238,0.06)' : 'rgba(248,113,113,0.06)'}}>
               {feedback.text}
             </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Drawing canvas */}
-        <div className="mx-7 mb-7 rounded-xl overflow-hidden"
+        <div className="mx-5 sm:mx-7 mb-5 sm:mb-7 rounded-xl overflow-hidden"
              style={{background:'rgba(2,4,20,0.75)', border:'1px solid rgba(255,255,255,0.04)'}}>
           <canvas ref={canvasRef} className="w-full block" style={{height:'300px'}} />
         </div>
       </div>
-    </FadeUp>
+    </div>
   )
 }
 

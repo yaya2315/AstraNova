@@ -168,6 +168,29 @@ export default function LoadingScreen() {
           animation: `ls-bar ${MIN_MS - 200}ms cubic-bezier(.4,0,.8,1) forwards`,
         }} />
       </div>
+
+      {/* Aviso discreto, solo en celular: la experiencia 3D fue pensada para
+          disfrutarse mejor con más pantalla e interacción por mouse — pero
+          no queremos que se sienta como una advertencia grande ni un cartel
+          de "usá otra cosa". Va chiquito, apagado y al final de todo, como
+          un dato al pasar mientras carga, no como algo que compite por
+          atención con el logo o la barra de progreso. `md:hidden` lo oculta
+          por completo en tablet/escritorio (breakpoint 768px, igual que
+          IS_MOBILE en el resto del sitio). */}
+      <div className="md:hidden" style={{
+        position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+        fontFamily: '"Space Grotesk", sans-serif',
+        fontSize: '0.5rem',
+        letterSpacing: '0.03em',
+        color: 'rgba(255,255,255,0.22)',
+        textAlign: 'center',
+        maxWidth: 230,
+        lineHeight: 1.5,
+        padding: '0 20px',
+        animation: 'ls-fadein 0.8s 1.15s ease both',
+      }}>
+        Para sentir aún más la inmersión, probá Astra Nova desde una computadora.
+      </div>
     </div>
   )
 }
